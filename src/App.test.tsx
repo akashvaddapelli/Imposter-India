@@ -55,12 +55,14 @@ describe('App: language filter on the setup screen', () => {
     fireEvent.change(screen.getByLabelText('Word language'), { target: { value: 'Assamese' } });
     fireEvent.change(screen.getByLabelText('Word difficulty'), { target: { value: 'Hard' } });
     // default categories contain Assamese words only at lower difficulty, so Hard + Assamese is empty
-    const alert = screen.queryByRole('alert');
-    if (alert) {
-      expect(alert.textContent).toMatch(/Assamese/);
-      expect((screen.getByRole('button', { name: /Deal the cards/ }) as HTMLButtonElement).disabled).toBe(true);
+    // the phone-only deal bar duplicates the summary panel's warning and button (CSS hides one of them)
+    const alerts = screen.queryAllByRole('alert');
+    const deals = screen.getAllByRole('button', { name: /Deal the cards/ }) as HTMLButtonElement[];
+    if (alerts.length) {
+      alerts.forEach(a => expect(a.textContent).toMatch(/Assamese/));
+      deals.forEach(d => expect(d.disabled).toBe(true));
     } else {
-      expect((screen.getByRole('button', { name: /Deal the cards/ }) as HTMLButtonElement).disabled).toBe(false);
+      deals.forEach(d => expect(d.disabled).toBe(false));
     }
   });
   it('remembers the chosen language between screens and reloads', () => {
@@ -159,6 +161,8 @@ describe('App: saved-word notices and recovery', () => {
     render(<App />);
     openLibrary();
     expect(screen.getByRole('button', { name: /Download unrecovered data/ })).toBeTruthy();
+    // the library is paginated and sorted A-Z, so find the new word by searching
+    fireEvent.change(screen.getByPlaceholderText(/Search words, aliases/), { target: { value: 'Brand New Dish' } });
     expect(screen.getAllByText('Brand New Dish').length).toBeGreaterThan(0);
   });
   it('asks about automatic English tags and applies the player’s choice', () => {
