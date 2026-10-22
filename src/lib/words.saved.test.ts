@@ -7,7 +7,7 @@ const memory = (initial?: string) => {
   return { getItem: (k: string) => data.get(k) ?? null, setItem: (k: string, v: string) => { data.set(k, v); }, peek: (k: string = EXTRA_WORDS_KEY) => data.get(k) };
 };
 const legacy = (over: Record<string, unknown> = {}) => ({ id: 'custom-1700000000000', name: 'Old Custom', category: 'objects', aliases: ['Oc'], languages: ['English'], regions: ['User added'], difficulty: 'Medium', recognition: 'Regional', ...over });
-const empty = { extras: [], shadowed: [], quarantined: [], notices: [] };
+const empty = { extras: [], shadowed: [], quarantined: [], notices: [], legacyEnglish: [] };
 
 describe('saved words: loading, migration and saving', () => {
   it('round-trips user words (custom and imported) and keeps their ids', () => {
@@ -33,7 +33,7 @@ describe('saved words: loading, migration and saving', () => {
     const loaded = loadSavedWords(words, store);
     expect(loaded.extras.map(w => w.name)).toEqual(['Keep Me']);
     expect(loaded.shadowed.map(w => w.id)).toEqual(['custom-9']);
-    expect(loaded.notices.join(' ')).toMatch(/now match built-in words/);
+    expect(loaded.notices.join(' ')).toMatch(/already in the built-in library/);
     saveSavedWords(loaded, store);
     expect(JSON.parse(store.peek()!).map((w: Word) => w.id)).toEqual(['custom-10', 'custom-9']);
     expect(loadSavedWords(words, store).shadowed).toHaveLength(1);
@@ -67,13 +67,12 @@ describe('saved words: loading, migration and saving', () => {
     expect(lib.find(w => w.id === 'places-delhi')!.aliases).not.toContain('Dosa');
     expect(validateWordBank(lib)).toEqual([]);
   });
-  it('quarantines unreadable records verbatim, keeps the good ones, and explains', () => {
+  it('quarantines unreadable records verbatim and keeps the good ones', () => {
     const bad = [{ id: 'custom-x', name: '', category: 'food' }, { name: 'No Cat' }, 42, null];
     const store = memory(JSON.stringify([...bad, legacy()]));
     const loaded = loadSavedWords(words, store);
     expect(loaded.extras).toHaveLength(1);
     expect(loaded.quarantined).toEqual(bad);
-    expect(loaded.notices.join(' ')).toMatch(/could not be read/);
     saveSavedWords(loaded, store);
     expect(JSON.parse(store.peek(QUARANTINE_KEY)!)).toEqual(bad);
     expect(loadSavedWords(words, store).quarantined).toEqual(bad);
@@ -103,7 +102,7 @@ describe('saved words: loading, migration and saving', () => {
   });
   it('survives storage that throws on read', () => {
     const broken = { getItem: () => { throw new Error('denied'); } };
-    expect(loadSavedWords(words, broken)).toEqual(empty);
+    expect(loadSavedWords(words, broken)).toEqual({ ...empty, readFailed: true });
   });
   it('only custom- and import- ids are user words', () => {
     expect(isUserWord({ id: 'custom-1' })).toBe(true);

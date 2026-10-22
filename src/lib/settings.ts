@@ -1,3 +1,4 @@
+import { browserStorage } from './storage';
 import { ANY_LANGUAGE } from './words';
 
 export type MotionPref = 'system' | 'full' | 'reduced';
@@ -27,11 +28,11 @@ export function parseSettings(raw: string | null | undefined): Settings {
   };
 }
 
-export function loadSettings(storage: Pick<Storage, 'getItem'> = localStorage): Settings {
+export function loadSettings(storage: Pick<Storage, 'getItem'> = browserStorage()): Settings {
   try { return parseSettings(storage.getItem(SETTINGS_KEY)); } catch { return { ...DEFAULT_SETTINGS }; }
 }
 
-export function saveSettings(s: Settings, storage: Pick<Storage, 'setItem'> = localStorage): boolean {
+export function saveSettings(s: Settings, storage: Pick<Storage, 'setItem'> = browserStorage()): boolean {
   try { storage.setItem(SETTINGS_KEY, JSON.stringify(s)); return true; } catch { return false; }
 }
 

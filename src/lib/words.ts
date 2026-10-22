@@ -1,3 +1,4 @@
+import { browserStorage } from './storage';
 import { categories, slugify, starterId, type Word } from '../data/words';
 
 const validCategories = new Set(categories.map(c => c.id));
@@ -189,6 +190,12 @@ export function emptyPoolReason(all: Word[], selected: string[], mixed: boolean,
 
 export const EXTRA_WORDS_KEY = 'ii-extra-words';
 export const QUARANTINE_KEY = 'ii-extra-words-unrecovered';
+/** Written on every save. Its absence on non-empty saved data means the data predates language-tag tracking. */
+export const SCHEMA_KEY = 'ii-saved-schema';
+export const SCHEMA_VERSION = '3';
+/** Ids of saved words whose language tag was most likely added automatically by an older version. */
+export const LEGACY_ENGLISH_KEY = 'ii-legacy-english';
+export const NOTICE_DISMISSED_KEY = 'ii-notice-dismissed';
 
 export type SavedWords = {
   /** Valid user words shown in the library. */
@@ -199,16 +206,22 @@ export type SavedWords = {
   quarantined: unknown[];
   /** Plain-language explanations for the player. */
   notices: string[];
+  /** Saved words (ids) that older versions tagged "English" automatically. The player decides what to do with them. */
+  legacyEnglish: string[];
+  /** True when storage could not be read at all; saving is then refused so existing data is never overwritten blind. */
+  readFailed?: boolean;
 };
 
-export const emptySaved = (): SavedWords => ({ extras: [], shadowed: [], quarantined: [], notices: [] });
+export const emptySaved = (): SavedWords => ({ extras: [], shadowed: [], quarantined: [], notices: [], legacyEnglish: [] });
 
 type ReadableStorage = Pick<Storage, 'getItem'>;
 type WritableStorage = Pick<Storage, 'setItem'>;
 
-function readJson(storage: ReadableStorage, key: string): { ok: true; value: unknown } | { ok: false; raw: string } | null {
+type ReadResult = { ok: true; value: unknown } | { ok: false; raw: string } | { failed: true } | null;
+
+function readJson(storage: ReadableStorage, key: string): ReadResult {
   let raw: string | null;
-  try { raw = storage.getItem(key); } catch { return null; }
+  try { raw = storage.getItem(key); } catch { return { failed: true }; }
   if (raw === null || raw === '') return null;
   try { return { ok: true, value: JSON.parse(raw) }; } catch { return { ok: false, raw }; }
 }
@@ -219,14 +232,17 @@ function readJson(storage: ReadableStorage, key: string): { ok: true; value: unk
  * - words that match a built-in word are "shadowed" (hidden from the library, but retained);
  * - anything unreadable is quarantined verbatim and reported.
  */
-export function loadSavedWords(starter: Word[], storage: ReadableStorage = localStorage): SavedWords {
+export function loadSavedWords(starter: Word[], storage: ReadableStorage = browserStorage()): SavedWords {
   const out = emptySaved();
   const previouslyQuarantined = readJson(storage, QUARANTINE_KEY);
-  if (previouslyQuarantined?.ok && Array.isArray(previouslyQuarantined.value)) out.quarantined.push(...previouslyQuarantined.value);
+  if (previouslyQuarantined && 'failed' in previouslyQuarantined) out.readFailed = true;
+  else if (previouslyQuarantined?.ok) out.quarantined.push(...(Array.isArray(previouslyQuarantined.value) ? previouslyQuarantined.value : [previouslyQuarantined.value]));
+  else if (previouslyQuarantined) out.quarantined.push(previouslyQuarantined.raw); // a damaged recovery file is itself kept
 
   const saved = readJson(storage, EXTRA_WORDS_KEY);
-  if (!saved) {
-    if (out.quarantined.length) out.notices.push(unrecoveredNotice(out.quarantined.length));
+  if (saved && 'failed' in saved) out.readFailed = true;
+  if (!saved || 'failed' in saved) {
+    out.quarantined = dedupeRecords(out.quarantined);
     return out;
   }
   const records: unknown[] = !saved.ok ? [saved.raw] : Array.isArray(saved.value) ? saved.value : [saved.value];
@@ -247,16 +263,68 @@ export function loadSavedWords(starter: Word[], storage: ReadableStorage = local
     else { extraKeys.add(key); out.extras.push(w); }
   });
 
+  out.quarantined = dedupeRecords(out.quarantined);
+  out.legacyEnglish = detectLegacyEnglish(storage, out.extras);
+
   if (out.shadowed.length) {
     const names = out.shadowed.slice(0, 3).map(w => `"${w.name}"`).join(', ');
-    out.notices.push(`${out.shadowed.length} saved word${out.shadowed.length === 1 ? '' : 's'} (${names}${out.shadowed.length > 3 ? ', ...' : ''}) now match built-in words. They are not shown twice; any extra aliases you saved were added to the built-in entry.`);
+    const n = out.shadowed.length;
+    out.notices.push(`${n} saved word${n === 1 ? '' : 's'} (${names}${n > 3 ? ', ...' : ''}) ${n === 1 ? 'is' : 'are'} already in the built-in library, so ${n === 1 ? 'it is' : 'they are'} not shown twice. Any extra aliases you saved were added to the built-in entry.`);
   }
   if (renamed) out.notices.push(`${renamed} saved word${renamed === 1 ? '' : 's'} had a clashing id and was given a new one.`);
-  if (out.quarantined.length) out.notices.push(unrecoveredNotice(out.quarantined.length));
   return out;
 }
 
-const unrecoveredNotice = (n: number) => `${n} saved record${n === 1 ? '' : 's'} could not be read. ${n === 1 ? 'It is' : 'They are'} kept safely and can be downloaded below.`;
+/** Drops exact repeats (by content) so repeated loads can never make recovery data grow. */
+function dedupeRecords(list: unknown[]): unknown[] {
+  const seen = new Set<string>();
+  return list.filter(r => {
+    const key = typeof r === 'string' ? `s:${r}` : `j:${JSON.stringify(r)}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+/**
+ * Before language tags were chosen by the player, the add-word form always saved `["English"]`.
+ * A saved word that still has exactly that default shape (custom id, one English tag, "User added") may therefore
+ * be a real choice or an automatic tag, and the two cannot be told apart. Once a save has stamped the schema marker,
+ * only the ids recorded at that time count, so words added later (when English is a genuine choice) are never flagged.
+ */
+function detectLegacyEnglish(storage: ReadableStorage, extras: Word[]): string[] {
+  const looksDefault = (w: Word) => w.id.startsWith('custom-') && w.languages.length === 1 && w.languages[0] === 'English' && w.regions.length === 1 && w.regions[0] === 'User added';
+  let marker: string | null;
+  try { marker = storage.getItem(SCHEMA_KEY); } catch { marker = null; }
+  if (marker === null) return extras.filter(looksDefault).map(w => w.id);
+  const recorded = readJson(storage, LEGACY_ENGLISH_KEY);
+  const ids = recorded && 'ok' in recorded && recorded.ok && Array.isArray(recorded.value) ? recorded.value.filter((x): x is string => typeof x === 'string') : [];
+  const present = new Set(extras.filter(w => w.languages.length === 1 && w.languages[0] === 'English').map(w => w.id));
+  return ids.filter(id => present.has(id));
+}
+
+/** The player chose to keep the English tags: nothing changes except that we stop asking. */
+export const keepLegacyEnglish = (saved: SavedWords): SavedWords => ({ ...saved, legacyEnglish: [] });
+
+/** The player chose to remove the automatic English tags: only the listed words are changed, to "no language". */
+export function clearLegacyEnglish(saved: SavedWords): SavedWords {
+  const ids = new Set(saved.legacyEnglish);
+  const clear = (w: Word): Word => (ids.has(w.id) && w.languages.length === 1 && w.languages[0] === 'English' ? { ...w, languages: [] } : w);
+  return { ...saved, extras: saved.extras.map(clear), shadowed: saved.shadowed.map(clear), legacyEnglish: [] };
+}
+
+/** Identifies the current set of notices so a dismissal only hides notices the player has already seen. */
+export const noticeKey = (notices: string[]): string => notices.join('\n');
+
+export function loadDismissedNotice(storage: ReadableStorage = browserStorage()): string | null {
+  try { return storage.getItem(NOTICE_DISMISSED_KEY); } catch { return null; }
+}
+
+/** Remembers a dismissal. This never touches saved words or recovery data. */
+export function saveDismissedNotice(key: string, storage: WritableStorage = browserStorage()): boolean {
+  try { storage.setItem(NOTICE_DISMISSED_KEY, key); return true; } catch { return false; }
+}
+
 
 /**
  * Builds the active library: built-in words (unchanged, apart from extra aliases the player saved
@@ -286,11 +354,18 @@ export function buildLibrary(starter: Word[], saved: SavedWords): Word[] {
   return [...merged, ...saved.extras];
 }
 
-/** Writes user words (and anything we are keeping safe). Returns false if the browser refused the write. */
-export function saveSavedWords(saved: Pick<SavedWords, 'extras' | 'shadowed' | 'quarantined'>, storage: WritableStorage = localStorage): boolean {
+/**
+ * Writes user words (and anything we are keeping safe). Returns false if the browser refused a write.
+ * Recovery data is written first: if that fails nothing else is touched, so records can never be lost between
+ * leaving the main list and arriving in the recovery list. Nothing is written if storage could not be read.
+ */
+export function saveSavedWords(saved: Pick<SavedWords, 'extras' | 'shadowed' | 'quarantined'> & Partial<Pick<SavedWords, 'legacyEnglish' | 'readFailed'>>, storage: WritableStorage = browserStorage()): boolean {
+  if (saved.readFailed) return false;
   try {
-    storage.setItem(EXTRA_WORDS_KEY, JSON.stringify([...saved.extras, ...saved.shadowed]));
     if (saved.quarantined.length) storage.setItem(QUARANTINE_KEY, JSON.stringify(saved.quarantined));
+    storage.setItem(LEGACY_ENGLISH_KEY, JSON.stringify(saved.legacyEnglish ?? []));
+    storage.setItem(EXTRA_WORDS_KEY, JSON.stringify([...saved.extras, ...saved.shadowed]));
+    storage.setItem(SCHEMA_KEY, SCHEMA_VERSION);
     return true;
   } catch {
     return false;
