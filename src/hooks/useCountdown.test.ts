@@ -52,3 +52,33 @@ describe('useCountdown', () => {
     expect(vi.getTimerCount()).toBe(0);
   });
 });
+
+describe('useCountdown onFinish', () => {
+  it('fires once when the countdown reaches zero', () => {
+    const onFinish = vi.fn();
+    const { result } = renderHook(() => useCountdown(3, onFinish));
+    expect(onFinish).not.toHaveBeenCalled();
+    act(() => result.current.start());
+    act(() => { vi.advanceTimersByTime(10000); });
+    expect(result.current.finished).toBe(true);
+    expect(onFinish).toHaveBeenCalledTimes(1);
+    act(() => { vi.advanceTimersByTime(10000); });
+    expect(onFinish).toHaveBeenCalledTimes(1);
+  });
+  it('does not fire on pause or reset, and fires again after a reset run', () => {
+    const onFinish = vi.fn();
+    const { result } = renderHook(() => useCountdown(3, onFinish));
+    act(() => result.current.start());
+    act(() => { vi.advanceTimersByTime(1000); });
+    act(() => result.current.pause());
+    act(() => result.current.reset());
+    expect(onFinish).not.toHaveBeenCalled();
+    act(() => result.current.start());
+    act(() => { vi.advanceTimersByTime(5000); });
+    expect(onFinish).toHaveBeenCalledTimes(1);
+    act(() => result.current.reset());
+    act(() => result.current.start());
+    act(() => { vi.advanceTimersByTime(5000); });
+    expect(onFinish).toHaveBeenCalledTimes(2);
+  });
+});

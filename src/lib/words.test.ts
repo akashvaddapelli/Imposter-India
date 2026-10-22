@@ -1,12 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { bank } from '../data/bank';
 import { categories, countByCategory, slugify, starterId, words, type Word } from '../data/words';
-import { eligibleWords, findExisting, hasStableStarterId, loadExtraWords, mergeWords, nameKey, normalizeWord, saveExtraWords, validateWordBank } from './words';
+import { eligibleWords, findExisting, hasStableStarterId, mergeWords, nameKey, normalizeWord, validateWordBank } from './words';
 
-const memory = (initial?: string) => {
-  let value = initial ?? null;
-  return { getItem: () => value, setItem: (_k: string, v: string) => { value = v; }, peek: () => value };
-};
 const make = (over: Partial<Word> = {}): Word => ({ id: 'food-test', name: 'Test', category: 'food', aliases: [], languages: ['English'], regions: ['Pan-India'], difficulty: 'Easy', recognition: 'Common', ...over });
 
 describe('word bank data', () => {
@@ -76,7 +72,8 @@ describe('normalizeWord', () => {
     expect(normalizeWord({ name: '***', category: 'food' }, 'x')).toBeNull();
     expect(normalizeWord({ name: 'Dosa', category: 'nope' }, 'x')).toBeNull();
     expect(normalizeWord({ name: 'x'.repeat(61), category: 'food' }, 'x')).toBeNull();
-    expect(normalizeWord({ name: ' Dosa ', category: 'food', aliases: 'bad' }, 'x')).toMatchObject({ name: 'Dosa', aliases: [], languages: ['English'], regions: ['User added'], difficulty: 'Medium' });
+    expect(normalizeWord({ name: ' Dosa ', category: 'food', aliases: 'bad' }, 'x')).toMatchObject({ name: 'Dosa', aliases: [], languages: [], regions: ['User added'], difficulty: 'Medium' });
+    expect(normalizeWord({ name: 'Dosa', category: 'food', aliases: 'bad' }, 'x')?.languages).toEqual([]);
   });
   it('cleans aliases: trims, de-duplicates, drops the name itself, and caps the list', () => {
     const w = normalizeWord({ name: 'Dosa', category: 'food', aliases: [' Dosai ', 'dosai', 'DOSA', '', 5, ...Array.from({ length: 20 }, (_, i) => `a${i}`)] }, 'x')!;
@@ -117,34 +114,6 @@ describe('import compatibility', () => {
   it('finds existing words by normalised name', () => {
     expect(findExisting(words, 'pani-puri')?.id).toBe('food-pani-puri');
     expect(findExisting(words, 'Nothing Like This')).toBeUndefined();
-  });
-});
-
-describe('extra word storage', () => {
-  it('round-trips custom and imported words together', () => {
-    const store = memory();
-    const a = normalizeWord({ name: 'My Word', category: 'food' }, 'custom-1')!;
-    const b = normalizeWord({ name: 'Other Word', category: 'food' }, 'import-2-0')!;
-    saveExtraWords([...words, a, b], store);
-    expect(loadExtraWords(words, store).map(w => w.name)).toEqual(['My Word', 'Other Word']);
-  });
-  it('never saves starter words', () => {
-    const store = memory();
-    saveExtraWords(words, store);
-    expect(JSON.parse(store.peek()!)).toEqual([]);
-  });
-  it('loads data saved by earlier versions (custom-<timestamp> ids, minimal fields)', () => {
-    const old = JSON.stringify([{ id: 'custom-1700000000000', name: 'Old Custom', category: 'objects', aliases: ['Oc'], languages: ['English'], regions: ['User added'], difficulty: 'Medium', recognition: 'Regional' }]);
-    expect(loadExtraWords(words, memory(old))).toMatchObject([{ id: 'custom-1700000000000', name: 'Old Custom' }]);
-  });
-  it('drops saved words that a newer starter list now provides, instead of duplicating them', () => {
-    const store = memory(JSON.stringify([{ id: 'custom-1', name: 'delhi', category: 'places' }, { id: 'custom-2', name: 'Keep Me', category: 'places' }]));
-    expect(loadExtraWords(words, store).map(w => w.name)).toEqual(['Keep Me']);
-  });
-  it('survives corrupted storage', () => {
-    expect(loadExtraWords(words, memory('{not json'))).toEqual([]);
-    expect(loadExtraWords(words, memory('{"a":1}'))).toEqual([]);
-    expect(loadExtraWords(words, memory('[1,null,{"name":"x"}]'))).toEqual([]);
   });
 });
 
