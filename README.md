@@ -13,6 +13,14 @@ npm install
 npm run dev
 ```
 
+Checks:
+
+```bash
+npm run typecheck
+npm run lint
+npm test
+```
+
 Build for production:
 
 ```bash
@@ -24,7 +32,9 @@ npm run preview
 
 - `src/App.tsx` — screen flow and client-side interactions
 - `src/data/words.ts` — categories and curated Indian-first starter word dataset
-- `src/lib/game.ts` — pure game helpers for word selection, role assignment, and vote tallying
+- `src/lib/game.ts` — pure game rules: setup validation, role assignment, vote validation, tie handling and round results
+- `src/lib/timer.ts` + `src/hooks/useCountdown.ts` — timestamp-based discussion timer
+- `src/lib/words.ts` — validation and persistence for custom/imported words
 - `src/styles.css` — responsive visual system and component styles
 
 ## Current UI screens
@@ -48,10 +58,16 @@ The included collection is a starter set, not an exhaustive dictionary. Counts a
 ## Planned follow-up in Claude
 
 1. Review and improve visual details and keyboard/mobile accessibility.
-2. Add unit tests for game rules and edge cases.
+2. Add component/end-to-end tests for the screen flow.
 3. Implement actual multi-device local networking in an appropriate runtime.
 4. Later, build online rooms, WebSocket game sync, and audio/video as a separate phase.
 
 ## Note
 
 Google Fonts are loaded from an external stylesheet for typography; all gameplay data and interactions are local. For fully offline font rendering, replace the font import with bundled font files or system fallbacks.
+
+## Game rules
+
+- 3-12 players. Imposters are always a minority: at most `floor((n-1)/2)`, capped at 3.
+- Each player votes once and cannot vote for themselves.
+- With k imposters the group wins only if the k most-voted players are exactly the imposters. A tie at the cut-off, or no votes, means the imposter wins.
