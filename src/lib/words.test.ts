@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { bank } from '../data/bank';
 import { categories, countByCategory, slugify, starterId, words, type Word } from '../data/words';
-import { eligibleWords, findExisting, hasStableStarterId, mergeWords, nameKey, normalizeWord, validateWordBank } from './words';
+import { eligibleWords, findExisting, findExistingOrAlias, hasStableStarterId, mergeWords, mergeWordsDetailed, nameKey, normalizeWord, validateWordBank } from './words';
 
 const make = (over: Partial<Word> = {}): Word => ({ id: 'food-test', name: 'Test', category: 'food', aliases: [], languages: ['English'], regions: ['Pan-India'], difficulty: 'Easy', recognition: 'Common', ...over });
 
@@ -114,6 +114,19 @@ describe('import compatibility', () => {
   it('finds existing words by normalised name', () => {
     expect(findExisting(words, 'pani-puri')?.id).toBe('food-pani-puri');
     expect(findExisting(words, 'Nothing Like This')).toBeUndefined();
+  });
+  it('treats a name that is another word’s alias as a duplicate (spelling-insensitive), but only for add/import', () => {
+    expect(findExisting(words, 'Golgappa')).toBeUndefined();
+    expect(findExistingOrAlias(words, 'Golgappa')?.id).toBe('food-pani-puri');
+    expect(findExistingOrAlias(words, 'gol-GAPPA')?.id).toBe('food-pani-puri');
+    expect(findExistingOrAlias(words, 'Pani puri')?.id).toBe('food-pani-puri');
+    expect(findExistingOrAlias(words, 'Nothing Like This')).toBeUndefined();
+    expect(findExistingOrAlias(words, '!!!')).toBeUndefined();
+  });
+  it('import skips a word whose name is an existing alias and reports it as a duplicate', () => {
+    const r = mergeWordsDetailed(words, [{ name: 'Puchka', category: 'food' }, { name: 'Totally New Dish', category: 'food' }], 'import', 1);
+    expect(r.duplicates).toBe(1);
+    expect(r.added.map(w => w.name)).toEqual(['Totally New Dish']);
   });
 });
 

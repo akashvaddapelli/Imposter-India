@@ -1,6 +1,6 @@
-# Imposter India — Frontend UI Prototype
+# Imposter India
 
-A responsive Indian-culture-first social deduction party game UI built with React, TypeScript, Vite, and Lucide icons.
+A responsive Indian-culture-first social deduction party game built with React, TypeScript, Vite, and Lucide icons. One Mobile (pass-and-play on a single phone) is fully playable offline.
 
 ## Scope
 
@@ -90,12 +90,10 @@ Words added in the library or imported from JSON are validated with the same rul
 - Avoid stereotypes and political persuasion. Do not add facts you cannot verify.
 - Category counts are always derived from the data.
 
-## Planned follow-up in Claude
+## Planned follow-up
 
-1. Review and improve visual details and keyboard/mobile accessibility.
-2. Add component/end-to-end tests for the screen flow.
-3. Implement actual multi-device local networking in an appropriate runtime.
-4. Later, build online rooms, WebSocket game sync, and audio/video as a separate phase.
+1. Implement actual multi-device local networking in an appropriate runtime.
+2. Later, build online rooms, WebSocket game sync, and audio/video as a separate phase.
 
 ## Note
 
@@ -106,3 +104,23 @@ Google Fonts are loaded from an external stylesheet for typography; all gameplay
 - 3-12 players. Imposters are always a minority: at most `floor((n-1)/2)`, capped at 3.
 - Each player votes once and cannot vote for themselves.
 - With k imposters the group wins only if the k most-voted players are exactly the imposters. A tie at the cut-off, or no votes, means the imposter wins.
+
+## Saved data, privacy and limits
+
+- Everything is stored in the browser's `localStorage` on the device you play on: settings (`ii-settings`) and custom/imported words (`ii-extra-words`, with a few small bookkeeping keys). **Nothing is synchronised between devices or browsers**, and clearing site data removes it. Use Export JSON in the Word Library to back up your words.
+- Browsers limit `localStorage` (typically a few MB) and may block it entirely (private modes, strict settings). If a save fails the app says so and the change lasts only until the page is closed; it never claims a failed save worked.
+- A game in progress is held in memory only. The secret word is never written to storage, is not in the page while a card is hidden, and is hidden again when you leave the screen or switch tabs. Refreshing or closing the tab ends the game (the browser asks first while a game is running).
+- Screen readers get short neutral announcements ("Player 3, it's your turn to vote."); they never include secret words or votes.
+
+## Deploying
+
+The build uses root-relative asset paths (`/assets/...`), so serve `dist/` from the root of a domain. To host under a sub-path (for example GitHub Pages project sites) set `base` in `vite.config.ts` first.
+
+## Known limitations
+
+- Multiple Mobiles is a UI prototype; there is no networking.
+- Custom words must contain Latin letters or digits (names made only of other scripts are rejected by the duplicate check).
+- Fonts load from Google Fonts; offline the app falls back to system fonts.
+- Category-removal chips on the setup screen are smaller than 44px; all other primary controls meet 44px.
+- Verified by browser emulation and automated tests only; see the Phase 5 report for what was and was not tested on real devices and with screen readers.
+

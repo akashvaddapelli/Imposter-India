@@ -270,3 +270,66 @@ describe('App: full offline flow', () => {
     expect(screen.getByText(/didn't clearly single out all 3 imposters/)).toBeTruthy();
   });
 });
+
+describe('App: adding words in the library', () => {
+  const openAdd = () => { click(/Word library/); click(/^Add word$/); return screen.getByRole('dialog'); };
+  const submit = (dialog: HTMLElement, name: string) => {
+    fireEvent.change(within(dialog).getByPlaceholderText(/Pesarattu/), { target: { value: name } });
+    fireEvent.click(within(dialog).getByRole('button', { name: /^(Add word|Save|Add)/ }));
+  };
+  it('rejects a name that is an alias of an existing word', () => {
+    render(<App />);
+    const dialog = openAdd();
+    submit(dialog, 'golgappa');
+    expect(within(screen.getByRole('dialog')).getByText(/already an alias of "Pani puri"/)).toBeTruthy();
+    expect(localStorage.getItem(EXTRA_WORDS_KEY)).toBeNull();
+  });
+  it('does not claim success when the browser refuses to save, and keeps the word for this session', () => {
+    render(<App />);
+    const dialog = openAdd();
+    const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new DOMException('full', 'QuotaExceededError'); });
+    submit(dialog, 'Zzyzx Test Dish');
+    setItem.mockRestore();
+    expect(screen.getByText(/Couldn't save to this browser/)).toBeTruthy();
+    expect(screen.queryByText(/added to your local library/)).toBeNull();
+    expect(localStorage.getItem(EXTRA_WORDS_KEY)).toBeNull();
+    fireEvent.change(screen.getByLabelText('Search words'), { target: { value: 'Zzyzx' } });
+    expect(screen.getByText('1 result')).toBeTruthy();
+  });
+  it('confirms a successful save', () => {
+    render(<App />);
+    const dialog = openAdd();
+    submit(dialog, 'Zzyzx Test Dish');
+    expect(screen.getByText(/"Zzyzx Test Dish" added to your local library/)).toBeTruthy();
+    expect(JSON.parse(localStorage.getItem(EXTRA_WORDS_KEY)!)).toHaveLength(1);
+  });
+});
+
+describe('App: screen-reader announcements and privacy', () => {
+  const live = () => screen.getAllByRole('status').map(e => e.textContent).join(' ');
+  it('announces whose turn it is while revealing and voting, without exposing the secret word', () => {
+    render(<App />);
+    goToSetup();
+    click(/Deal the cards/);
+    click(/Tap to reveal/);
+    const word = document.querySelector('.revealed-content')!.textContent!;
+    click(/Hide card/);
+    expect(live()).toMatch(/Player 2, it's your turn\. Reveal your card privately\./);
+    for (let i = 1; i < 5; i++) { click(/Tap to reveal/); click(/Hide card/); }
+    expect(live()).toMatch(/discussion starts now/);
+    click(/Everyone's had a turn/);
+    fireEvent.click(screen.getAllByRole('button', { name: /^.?Player 2/ })[0]);
+    click(/Lock vote/);
+    expect(live()).toMatch(/Player 2, it's your turn to vote\./);
+    // nothing announced contains a word from the secret card (role text or word)
+    const secret = word.match(/YOUR SECRET WORD(.+?)(Food|Family|Indian|Hindu|Gods|Demons|Agri|Objects|Animals|History|Sports|Festivals|Professions|Languages|Transport|Science|Rivers|Heroes)/)?.[1];
+    if (secret) expect(live()).not.toContain(secret.trim());
+  });
+  it('announces that results are on screen after the last vote', () => {
+    render(<App />);
+    goToSetup();
+    dealAndRevealAll(5);
+    voteAll(v => (v === 1 ? 'You' : 'Player 2'), 5);
+    expect(live()).toMatch(/Votes are in/);
+  });
+});

@@ -95,3 +95,21 @@ html:not([data-theme="dark"]) .step-number{color:#7d7568}
 [data-theme="dark"] .turn-number,[data-theme="dark"] .subtle-cancel,[data-theme="dark"] .result-word-card .role-label,[data-theme="dark"] .result-votes span{color:#b5ad9f}
 [data-theme="dark"] .secret-card.revealed:not(.imposter-card) .role-label,[data-theme="dark"] .secret-card.revealed:not(.imposter-card) .revealed-content p,[data-theme="dark"] .secret-card.revealed:not(.imposter-card) .secret-card-bottom span{color:#5c564d}
 html:not([data-theme="dark"]) .secret-card.revealed:not(.imposter-card) .secret-card-bottom span{color:#6b6559}
+
+/* Phase 5: long names must wrap instead of widening the page (320px, 12 players, 20-char names) */
+main h1,main h3,.vote-card b,.turn-item b,.vote-breakdown-row,.result-votes{overflow-wrap:anywhere}
+.vote-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
+.vote-card,.turn-item>span:nth-child(2){min-width:0}
+@media(max-width:760px){.vote-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+/* Phase 5: touch targets of at least 44px for primary controls */
+.stepper button{width:44px;height:44px}
+.stepper{gap:10px;padding:3px 4px}
+.footer button,.text-link,.subtle-cancel,.btn-sm{min-height:44px}
+.text-link,.subtle-cancel{display:inline-flex;align-items:center;justify-content:center}
+.setup-aside select,.setup-main select,select{min-height:44px}
+@media(max-width:440px){.btn{min-height:44px}}
+.footer-inner>div button{min-height:44px}
+.btn{min-height:44px}
+.topbar .brand{min-height:44px}
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}

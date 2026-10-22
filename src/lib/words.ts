@@ -55,13 +55,20 @@ export function findExisting(existing: Word[], name: string): Word | undefined {
   return existing.find(w => nameKey(w.name) === key);
 }
 
+/** Like findExisting, but a name that is another word's alias (for example Golgappa for Pani puri) also counts as a duplicate. */
+export function findExistingOrAlias(existing: Word[], name: string): Word | undefined {
+  const key = nameKey(name);
+  if (!key) return undefined;
+  return existing.find(w => nameKey(w.name) === key || w.aliases.some(a => nameKey(a) === key));
+}
+
 export type MergeResult = { added: Word[]; duplicates: number; invalid: number };
 
 /** Normalises a list, skipping invalid entries and names already known. Incoming ids are ignored. */
 export function mergeWordsDetailed(existing: Word[], incoming: unknown, idPrefix: string, stamp = Date.now()): MergeResult {
   if (!Array.isArray(incoming)) throw new Error('Invalid format: expected a JSON array of words.');
   if (incoming.length > MAX_IMPORT_WORDS) throw new Error(`Invalid format: too many words (limit ${MAX_IMPORT_WORDS}).`);
-  const known = new Set(existing.map(w => nameKey(w.name)));
+  const known = new Set(existing.flatMap(w => [nameKey(w.name), ...w.aliases.map(nameKey)]));
   const result: MergeResult = { added: [], duplicates: 0, invalid: 0 };
   incoming.forEach((raw, i) => {
     const w = normalizeWord(raw, `${idPrefix}-${stamp}-${i}`);
