@@ -49,6 +49,15 @@ npm run preview
 - Sequential private voting UI and results
 - Settings with local appearance, sound, motion, and language controls
 
+## Settings and saved data
+
+- **Word language** (setup and Settings): `Any language` (default) uses every word. Choosing a language keeps only words explicitly tagged with it. A tag means "familiar to that language community", not "exclusive", so one word can match several languages. Untagged words (for example custom words saved without a language) are included under `Any` but never under a specific language. The language filter combines with categories and difficulty (AND); Mixed ignores the category selection but still applies language and difficulty. If the combination leaves no words, the setup screen explains why and the start button is disabled.
+- **Sound**: short Web Audio cues for card reveals, votes, the timer ending and results. It is a no-op if the browser lacks audio or blocks it.
+- **Motion**: follows the device's reduced-motion setting by default; can be forced to full or reduced.
+- **Appearance**: Light, Dark or System.
+- Preferences are stored in `localStorage` (`ii-settings`); missing or malformed values fall back to defaults.
+- **Custom and imported words** are stored in `ii-extra-words`. On load, nothing is discarded: valid words that now match a built-in word (case, spacing, accent and punctuation insensitive) are kept but not shown twice, and any extra aliases are added to the built-in entry (built-in names, categories, difficulty and notes are never changed). Records that cannot be read are kept in `ii-extra-words-unrecovered` and can be downloaded from the Word Library notice.
+
 ## Word library
 
 The starter bank lives in `src/data/bank/`, **one file per category** (`food.ts`, `places.ts`, ...). `src/data/words.ts` holds the category list and builds the typed `Word[]` from those files; `src/data/types.ts` defines the schema.
