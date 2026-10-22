@@ -16,9 +16,11 @@ const strings = (v: unknown, max = 40): string[] =>
 
 /**
  * Comparison key for spotting the same word written differently:
- * case, accents, spaces, hyphens, dots and apostrophes are ignored ("Auto-rickshaw" == "autorickshaw").
+ * case, Latin accents, spaces, hyphens, dots and apostrophes are ignored ("Auto-rickshaw" == "autorickshaw").
+ * Letters, digits and vowel signs of any script are kept, so Devanagari, Telugu and other Indian-script words
+ * get a real key. Only Latin combining accents (U+0300–U+036F) are folded away; other marks (matras) stay.
  */
-export const nameKey = (s: string): string => s.normalize('NFKD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '');
+export const nameKey = (s: string): string => s.normalize('NFKD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^\p{L}\p{M}\p{N}]+/gu, '');
 
 export const isUserWord = (w: Pick<Word, 'id'>) => w.id.startsWith('custom-') || w.id.startsWith('import-');
 

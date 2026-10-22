@@ -21,7 +21,7 @@ html[data-motion='reduced'],html[data-motion='reduced'] *,html[data-motion='redu
 @media(max-width:760px){
   .setup-aside .setup-summary>.btn,.setup-aside .setup-summary>.pool-warning,.setup-aside .setup-summary .summary-foot{display:none}
   .setup-layout{margin-bottom:96px}
-  .deal-bar{display:block;position:fixed;left:0;right:0;bottom:0;z-index:30;background:rgba(251,250,247,.96);border-top:1px solid var(--line);padding:10px 16px calc(10px + env(safe-area-inset-bottom));box-shadow:0 -8px 24px rgba(49,39,25,.07)}
+  .deal-bar{display:block;position:fixed;left:0;right:0;bottom:0;z-index:30;background:#fbfaf7;border-top:1px solid var(--line);padding:10px 16px calc(10px + env(safe-area-inset-bottom));box-shadow:0 -8px 24px rgba(49,39,25,.07)}
   .deal-bar-row{display:flex;align-items:center;justify-content:space-between;gap:12px;max-width:560px;margin:0 auto}
   .deal-bar-info{display:flex;flex-direction:column;line-height:1.25;min-width:0}
   .deal-bar-info b{font-size:15px}
@@ -113,3 +113,11 @@ main h1,main h3,.vote-card b,.turn-item b,.vote-breakdown-row,.result-votes{over
 .btn{min-height:44px}
 .topbar .brand{min-height:44px}
 .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+
+/* Phase 5.1: category-removal chips and "Clear all" get a 44px touch target at every width */
+.chip,.clear-link{min-height:44px}
+.chip{padding-top:0;padding-bottom:0}
+.clear-link{display:inline-flex;align-items:center}
+/* Phase 5.1: the text fields fill their 44px control so the whole row is the tap target */
+.search-field{height:44px}
+.search-field input,.player-input input{align-self:stretch;height:100%}

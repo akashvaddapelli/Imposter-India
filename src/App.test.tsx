@@ -269,6 +269,39 @@ describe('App: full offline flow', () => {
     expect(screen.getByRole('heading', { name: 'No clear verdict.' })).toBeTruthy();
     expect(screen.getByText(/didn't clearly single out all 3 imposters/)).toBeTruthy();
   });
+  it('runs a 12-player game with long and non-Latin names through setup, reveal, discussion, voting and results', () => {
+    render(<App />);
+    goToSetup();
+    for (let i = 0; i < 7; i++) fireEvent.click(screen.getByLabelText('More players'));
+    expect(screen.getByText('12 players')).toBeTruthy();
+    const longNames = [
+      'Anantharamakrishnan',
+      'Chandrasekharaswamy',
+      'శ్రీనివాసరామానుజన్',
+      'हरिवंशरायाबच्चन',
+      'PlayerWithTwentyChar',
+      'Venkatasubramanian',
+      'Radhakrishnamurthy',
+      'BalasubramaniamXX',
+      'ParameswaranNairXX',
+      'SwaminathanAiyerXX',
+      'Muthuswamydikshitar',
+      'KalyanasundaramXXX',
+    ];
+    longNames.forEach((name, idx) => {
+      const input = screen.getByLabelText(`Player ${idx + 1} name`);
+      fireEvent.change(input, { target: { value: name } });
+    });
+    dealAndRevealAll(12);
+    expect(screen.getByRole('heading', { name: /Drop your clue/ })).toBeTruthy();
+    longNames.forEach(name => {
+      expect(screen.getAllByText(name).length).toBeGreaterThan(0);
+    });
+    voteAll(v => (v === 1 ? longNames[0] : longNames[1]), 12);
+    expect(screen.getByText(/THE SECRET WORD WAS/i)).toBeTruthy();
+    click(/Play again/);
+    expect(screen.getByLabelText('Fewer players')).toBeTruthy();
+  });
 });
 
 describe('App: adding words in the library', () => {
@@ -295,6 +328,53 @@ describe('App: adding words in the library', () => {
     expect(localStorage.getItem(EXTRA_WORDS_KEY)).toBeNull();
     fireEvent.change(screen.getByLabelText('Search words'), { target: { value: 'Zzyzx' } });
     expect(screen.getByText('1 result')).toBeTruthy();
+  });
+  it('accepts a Devanagari word and keeps it exactly as typed', () => {
+    render(<App />);
+    submit(openAdd(), 'पानी पूरी');
+    expect(screen.getByText(/"पानी पूरी" added to your local library/)).toBeTruthy();
+    expect(JSON.parse(localStorage.getItem(EXTRA_WORDS_KEY)!)[0].name).toBe('पानी पूरी');
+  });
+  it('accepts a Telugu word and keeps it exactly as typed', () => {
+    render(<App />);
+    submit(openAdd(), 'బిర్యానీ');
+    expect(screen.getByText(/"బిర్యానీ" added to your local library/)).toBeTruthy();
+    expect(JSON.parse(localStorage.getItem(EXTRA_WORDS_KEY)!)[0].name).toBe('బిర్యానీ');
+  });
+  it('accepts a mixed-script name (Telugu + Latin) unchanged', () => {
+    render(<App />);
+    submit(openAdd(), 'పానీ puri');
+    expect(screen.getByText(/"పానీ puri" added to your local library/)).toBeTruthy();
+    expect(JSON.parse(localStorage.getItem(EXTRA_WORDS_KEY)!)[0].name).toBe('పానీ puri');
+  });
+  it('rejects a whitespace-only name with an empty-name message', () => {
+    render(<App />);
+    const dialog = openAdd();
+    submit(dialog, '   ');
+    expect(within(screen.getByRole('dialog')).getByText(/Enter a word or name first/)).toBeTruthy();
+    expect(localStorage.getItem(EXTRA_WORDS_KEY)).toBeNull();
+  });
+  it('rejects a Devanagari-punctuation-only name (danda) as needing a letter or number', () => {
+    render(<App />);
+    const dialog = openAdd();
+    submit(dialog, '।।');
+    expect(within(screen.getByRole('dialog')).getByText(/at least one letter or number, in any language/)).toBeTruthy();
+    expect(localStorage.getItem(EXTRA_WORDS_KEY)).toBeNull();
+  });
+  it('detects a duplicate Indian-script word (spacing-insensitive) and refuses the second save', () => {
+    render(<App />);
+    submit(openAdd(), 'పానీ పూరీ');
+    expect(screen.getByText(/"పానీ పూరీ" added to your local library/)).toBeTruthy();
+    const dialog2 = openAdd();
+    submit(dialog2, 'పానీ  పూరీ');
+    expect(within(screen.getByRole('dialog')).getByText(/already in the library/)).toBeTruthy();
+  });
+  it('explains that a punctuation-only name needs a letter or number', () => {
+    render(<App />);
+    const dialog = openAdd();
+    submit(dialog, '!!! ---');
+    expect(within(screen.getByRole('dialog')).getByText(/at least one letter or number, in any language/)).toBeTruthy();
+    expect(localStorage.getItem(EXTRA_WORDS_KEY)).toBeNull();
   });
   it('confirms a successful save', () => {
     render(<App />);

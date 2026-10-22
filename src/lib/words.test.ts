@@ -151,3 +151,54 @@ describe('eligibleWords (what a round can draw from)', () => {
     expect(eligibleWords(all, [], false, 'Any')).toEqual([]);
   });
 });
+
+describe('Unicode custom words (Indian scripts)', () => {
+  const dev = 'पानी पूरी';
+  const tel = 'పానీ పూరీ';
+  it('keeps letters and vowel signs of Indian scripts in the comparison key', () => {
+    expect(nameKey(dev)).toBe('पानीपूरी');
+    expect(nameKey(tel)).toBe('పానీపూరీ');
+  });
+  it('still folds Latin case, accents, spaces and punctuation', () => {
+    expect(nameKey('Pâni púri')).toBe('panipuri');
+    expect(nameKey('Auto-rickshaw.')).toBe('autorickshaw');
+  });
+  it('accepts Devanagari and Telugu words exactly as typed (no transliteration)', () => {
+    expect(normalizeWord({ name: dev, category: 'food' }, 'custom-1')?.name).toBe(dev);
+    expect(normalizeWord({ name: tel, category: 'food' }, 'custom-2')?.name).toBe(tel);
+  });
+  it('accepts mixed-script names and keeps them unchanged', () => {
+    expect(normalizeWord({ name: 'पानी puri', category: 'food' }, 'custom-3')?.name).toBe('पानी puri');
+  });
+  it('still accepts plain Latin words', () => {
+    expect(normalizeWord({ name: 'Pani puri', category: 'food' }, 'custom-4')?.name).toBe('Pani puri');
+  });
+  it('rejects punctuation-only, whitespace-only and empty names', () => {
+    expect(normalizeWord({ name: '!!! ---', category: 'food' }, 'x')).toBeNull();
+    expect(normalizeWord({ name: '।।', category: 'food' }, 'x')).toBeNull();
+    expect(normalizeWord({ name: '   	  ', category: 'food' }, 'x')).toBeNull();
+    expect(normalizeWord({ name: '', category: 'food' }, 'x')).toBeNull();
+  });
+  it('enforces the length limit on Indian-script names too', () => {
+    expect(normalizeWord({ name: 'पा'.repeat(40), category: 'food' }, 'x')).toBeNull();
+    expect(normalizeWord({ name: 'पा'.repeat(20), category: 'food' }, 'x')).not.toBeNull();
+  });
+  it('detects duplicates in Indian scripts despite spacing and punctuation', () => {
+    const existing = [normalizeWord({ name: dev, category: 'food' }, 'custom-1')!];
+    expect(findExistingOrAlias(existing, 'पानी  पूरी')?.name).toBe(dev);
+    expect(findExistingOrAlias(existing, 'पानी-पूरी')?.name).toBe(dev);
+    expect(findExistingOrAlias(existing, 'पानी')).toBeUndefined();
+  });
+  it('does not treat a Devanagari word as a duplicate of a Latin one (no transliteration)', () => {
+    expect(findExistingOrAlias(words, 'पानी पूरी')).toBeUndefined();
+  });
+  it('import skips a duplicate Telugu word and keeps the new one', () => {
+    const existing = [normalizeWord({ name: tel, category: 'food' }, 'custom-1')!];
+    const r = mergeWordsDetailed(existing, [{ name: 'పానీ-పూరీ', category: 'food' }, { name: 'బిర్యానీ', category: 'food' }], 'import', 2);
+    expect(r.duplicates).toBe(1);
+    expect(r.added.map(w => w.name)).toEqual(['బిర్యానీ']);
+  });
+  it('the starter library still passes every integrity check', () => {
+    expect(validateWordBank(words)).toEqual([]);
+  });
+});

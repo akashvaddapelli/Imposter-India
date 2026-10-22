@@ -119,8 +119,8 @@ The build uses root-relative asset paths (`/assets/...`), so serve `dist/` from 
 ## Known limitations
 
 - Multiple Mobiles is a UI prototype; there is no networking.
-- Custom words must contain Latin letters or digits (names made only of other scripts are rejected by the duplicate check).
+- Custom words accept letters and digits of any script. Duplicate checks ignore case, Latin accents, spaces and punctuation but never transliterate, so a Devanagari word and its Latin spelling are different words.
 - Fonts load from Google Fonts; offline the app falls back to system fonts.
-- Category-removal chips on the setup screen are smaller than 44px; all other primary controls meet 44px.
-- Verified by browser emulation and automated tests only; see the Phase 5 report for what was and was not tested on real devices and with screen readers.
+- Layout and 44px targets are verified in emulated viewports only; the procedure is in `docs/browser-qa.md`.
+- Verified by browser emulation and automated tests only. Real devices and screen readers are not yet tested.
 
