@@ -49,11 +49,37 @@ npm run preview
 - Sequential private voting UI and results
 - Settings with local appearance, sound, motion, and language controls
 
-## Word library expansion
+## Word library
 
-Each word has a stable ID, canonical name, category, aliases, languages, region tags, difficulty, and recognition level. Add curated entries to `raw` in `src/data/words.ts`, or use the local Word Library form. Custom words are stored in browser localStorage. The JSON export can be version-controlled and imported into another browser.
+The starter bank lives in `src/data/bank/`, **one file per category** (`food.ts`, `places.ts`, ...). `src/data/words.ts` holds the category list and builds the typed `Word[]` from those files; `src/data/types.ts` defines the schema.
 
-The included collection is a starter set, not an exhaustive dictionary. Counts are derived from actual data. Regional language coverage and cultural familiarity should be reviewed as the library expands.
+### Adding words
+
+Add a row to the category's file:
+
+```ts
+// [name, aliases, languages, regions, difficulty, note?]
+['Pani puri', 'Golgappa|Puchka', 'Hindi+English+Bengali', 'Pan-India', 'E'],
+```
+
+- `aliases` - alternate **names or spellings only**, separated by `|`. Put explanations in `note`, not aliases.
+- `languages` / `regions` - separated by `+`. Use `Pan-India` for widely known words.
+- `difficulty` - `E` (Easy / Common), `M` (Medium / Regional), `H` (Hard / Specialist). Recognition is derived from it.
+- `note` - optional, short and factual (max 160 characters). Use it where meaning varies by region or tradition.
+- The id is generated as `<category>-<slug of name>` (for example `food-pani-puri`) and must stay stable: **do not rename existing words**; add an alias instead.
+
+`npm test` checks the whole bank: unique ids and names (spelling-insensitive), valid categories and metadata, no alias that is another word, and stable ids.
+
+### Custom words and import/export
+
+Words added in the library or imported from JSON are validated with the same rules (`src/lib/words.ts`), de-duplicated against the library ignoring case, accents and punctuation, and stored in browser localStorage (`ii-extra-words`). Imported ids are ignored and regenerated (`import-<timestamp>-<n>`), so a file exported from this app can be re-imported safely.
+
+### Content guidelines
+
+- Prefer recognisable words for a casual party game; balance pan-Indian and regional references.
+- Treat religious and mythological traditions respectfully; use `note` where traditions differ.
+- Avoid stereotypes and political persuasion. Do not add facts you cannot verify.
+- Category counts are always derived from the data.
 
 ## Planned follow-up in Claude
 
