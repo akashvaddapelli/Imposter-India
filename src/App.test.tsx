@@ -221,3 +221,52 @@ describe('App: storage unavailable', () => {
     vi.restoreAllMocks();
   });
 });
+
+const dealAndRevealAll = (players: number) => {
+  click(/Deal the cards/);
+  for (let i = 0; i < players; i++) { click(/Tap to reveal/); click(/Hide card/); }
+};
+const voteAll = (target: (voter: number) => string, players: number) => {
+  click(/Everyone's had a turn/);
+  for (let v = 0; v < players; v++) {
+    fireEvent.click(screen.getAllByRole('button', { name: new RegExp(`^.?${target(v)}`) })[0]);
+    click(v === players - 1 ? /Reveal votes/ : /Lock vote/);
+  }
+};
+
+describe('App: screen changes keep keyboard focus', () => {
+  it('moves focus to the main region when the screen changes under a focused button', () => {
+    render(<App />);
+    const play = screen.getAllByRole('button', { name: /Play offline/ })[0];
+    play.focus();
+    fireEvent.click(play);
+    expect(document.activeElement).toBe(document.getElementById('main'));
+  });
+});
+
+describe('App: full offline flow', () => {
+  it('plays the minimum 3-player game through to results and starts a new round', () => {
+    render(<App />);
+    goToSetup();
+    for (let i = 0; i < 2; i++) fireEvent.click(screen.getByLabelText('Fewer players'));
+    dealAndRevealAll(3);
+    expect(screen.getByRole('heading', { name: /Drop your clue/ })).toBeTruthy();
+    // everyone votes for Player 2 (Player 2 votes for You): a clear result either way
+    voteAll(v => (v === 1 ? 'You' : 'Player 2'), 3);
+    expect(screen.getByText(/THE SECRET WORD WAS/i)).toBeTruthy();
+    click(/Play again/);
+    expect(screen.getByLabelText('Fewer players')).toBeTruthy();
+  });
+  it('explains a multi-imposter round where the votes could not single out every imposter', () => {
+    render(<App />);
+    goToSetup();
+    for (let i = 0; i < 2; i++) fireEvent.click(screen.getByLabelText('More players'));
+    for (let i = 0; i < 2; i++) fireEvent.click(screen.getByLabelText('More imposters'));
+    expect(screen.getByLabelText('More imposters')).toHaveProperty('disabled', true);
+    dealAndRevealAll(7);
+    // everyone piles on Player 2, who votes for You: only two players get votes, but three imposters exist
+    voteAll(v => (v === 1 ? 'You' : 'Player 2'), 7);
+    expect(screen.getByRole('heading', { name: 'No clear verdict.' })).toBeTruthy();
+    expect(screen.getByText(/didn't clearly single out all 3 imposters/)).toBeTruthy();
+  });
+});

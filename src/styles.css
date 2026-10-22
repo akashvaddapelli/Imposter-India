@@ -65,3 +65,33 @@ html[data-motion='reduced'],html[data-motion='reduced'] *,html[data-motion='redu
 .category-content b{display:block;padding-right:22px}
 .show-more{display:flex;justify-content:center;margin:18px 0 6px}
 @media(max-width:440px){.btn-sm{font-size:12px}.btn-md,.btn-lg{font-size:13px}.btn{min-height:42px}}
+
+/* Phase 4 contrast pass 2: measured against rendered backgrounds (light theme only) */
+html:not([data-theme="dark"]) .brand-copy small{color:#6b6559}
+html:not([data-theme="dark"]) .sidebar-label{color:#6b6559}
+html:not([data-theme="dark"]) .library-category>b{color:#6b6559}
+html:not([data-theme="dark"]) .step-number{color:#7d7568}
+
+/* Phase 4 dark-theme contrast pass: surfaces that stayed light and muted text that was too dim */
+.note-alert{background:#c2410c}
+[data-theme="dark"] .btn-ghost,[data-theme="dark"] .eyebrow,[data-theme="dark"] .hero-kicker,[data-theme="dark"] .no-wifi,[data-theme="dark"] .art-caption,[data-theme="dark"] .summary-foot,[data-theme="dark"] .footer-inner span,[data-theme="dark"] .footer button,[data-theme="dark"] .quick-stats *,[data-theme="dark"] .library-sidebar *,[data-theme="dark"] .word-card *,[data-theme="dark"] .mode-card small,[data-theme="dark"] .mode-card li,[data-theme="dark"] .mode-card li span,[data-theme="dark"] .library-total small,[data-theme="dark"] .results-count{color:#b5ad9f}
+[data-theme="dark"] .text-link{color:#b7a9f0}
+[data-theme="dark"] .clear-link,[data-theme="dark"] .limit-note{color:#f0a48f}
+[data-theme="dark"] .stepper,[data-theme="dark"] .library-total,[data-theme="dark"] .results-count,[data-theme="dark"] .summary-chip{background:#2e2d28}
+[data-theme="dark"] .chip,[data-theme="dark"] .library-category.active{background:#3a2a25}
+[data-theme="dark"] .chip{color:#f3c9b8}
+[data-theme="dark"] .library-category>b,[data-theme="dark"] .library-category.active span{color:#d9d0c2}
+[data-theme="dark"] .mixed-card b,[data-theme="dark"] .mixed-card span{color:#f5f1e8}
+[data-theme="dark"] .floating-note,[data-theme="dark"] .floating-note *,[data-theme="dark"] .playing-card .card-label{color:#4a453d}
+[data-theme="dark"] .floating-note b{color:#25231f}
+[data-theme="dark"] .hero-proof,[data-theme="dark"] .hero-proof span,[data-theme="dark"] .mode-features,[data-theme="dark"] .mode-features span,[data-theme="dark"] .library-disclaimer span,[data-theme="dark"] .vote-footer span,[data-theme="dark"] .vote-breakdown-row b{color:#b5ad9f}
+[data-theme="dark"] .word-letter{color:#3f3a33}
+[data-theme="dark"] .sidebar-tip,[data-theme="dark"] .sidebar-tip *{color:#4a453d}
+[data-theme="dark"] .difficulty.easy{color:#2f6b4d}
+[data-theme="dark"] .difficulty.medium{color:#7a5a12}
+[data-theme="dark"] .difficulty.hard{color:#9a3f25}
+[data-theme="dark"] .footer .brand-mark,[data-theme="dark"] .footer .brand-mark *{color:#25231f}
+[data-theme="dark"] .game-pill{background:#2e2d28;color:#e8e1d4}
+[data-theme="dark"] .turn-number,[data-theme="dark"] .subtle-cancel,[data-theme="dark"] .result-word-card .role-label,[data-theme="dark"] .result-votes span{color:#b5ad9f}
+[data-theme="dark"] .secret-card.revealed:not(.imposter-card) .role-label,[data-theme="dark"] .secret-card.revealed:not(.imposter-card) .revealed-content p,[data-theme="dark"] .secret-card.revealed:not(.imposter-card) .secret-card-bottom span{color:#5c564d}
+html:not([data-theme="dark"]) .secret-card.revealed:not(.imposter-card) .secret-card-bottom span{color:#6b6559}
