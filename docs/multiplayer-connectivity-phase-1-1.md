@@ -47,7 +47,7 @@ No Render service has been created here, so no host URL exists to report. Public
 
 ## Safeguards and limitations
 
-- Server validates room code syntax, participant fields/membership, message shape, text length, payload size, per-socket message rate, active room count, room capacity, origin, and concurrent connections. Excess message rate closes that socket. Shutdown closes sockets cleanly on `SIGTERM`/`SIGINT`.
+- Server validates room code syntax, participant fields/membership, message shape, text length, payload size, per-socket message rate, active room count, room capacity, origin, and concurrent connections. Excess message rate closes that socket. The process invokes relay shutdown on `SIGTERM`/`SIGINT` and closes active sockets.
 - Health data contains service status and active-room count only. No words, roles, votes, or gameplay state are sent or logged.
 - The origin allowlist reduces unwanted browser-origin use but is not identity/authentication and can be forged by non-browser clients. There is no persistence, IP-based rate limit, reconnect token, relay authentication, or protection against distributed abuse. Keep this proof private and low-volume.
 - Automated loopback relay tests prove the local websocket handshake, rules and message exchange only. They do not prove mobile-browser behavior, hosted WSS, same-Wi-Fi connectivity, or cross-network reachability.
