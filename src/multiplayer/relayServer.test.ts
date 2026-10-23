@@ -46,6 +46,25 @@ afterEach(async () => {
 });
 
 describe('WebSocket relay integration', () => {
+  it('rejects browser origins outside the configured allowlist', async () => {
+    await relay?.close();
+    relay = createRelayServer({ allowedOrigins: ['https://game.example'] });
+    await new Promise<void>((resolveListen) => relay?.httpServer.listen(0, '127.0.0.1', resolveListen));
+
+    const address = relay?.httpServer.address();
+    if (!address || typeof address === 'string') throw new Error('Relay did not bind to a TCP port.');
+    const socket = new WebSocket(`ws://127.0.0.1:${address.port}`, { origin: 'https://untrusted.example' });
+    clients.push(socket);
+    const response = await new Promise<number>((resolveResponse, rejectResponse) => {
+      socket.once('unexpected-response', (_request, result) => resolveResponse(result.statusCode ?? 0));
+      socket.once('open', () => rejectResponse(new Error('Unexpected origin was accepted.')));
+      socket.once('error', () => undefined);
+    });
+
+    expect(response).toBe(403);
+    socket.terminate();
+  });
+
   it('creates, joins, rejects invalid room actions, relays messages, and transfers host on disconnect', async () => {
     const address = relay?.httpServer.address();
     if (!address || typeof address === 'string') throw new Error('Relay did not bind to a TCP port.');

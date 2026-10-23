@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: imposter-india-relay
+    runtime: node
+    plan: free
+    region: singapore
+    branch: phase-6-multiplayer-connectivity
+    buildCommand: npm ci
+    startCommand: npm run server
+    healthCheckPath: /health
+    autoDeploy: false
+    maxShutdownDelaySeconds: 30
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: MULTIPLAYER_ALLOWED_ORIGINS
+        sync: false

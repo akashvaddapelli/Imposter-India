@@ -9,6 +9,7 @@ const MAX_ROOM_CODE_LENGTH = 12;
 const MAX_NAME_LENGTH = 24;
 const MAX_TEXT_LENGTH = 140;
 const MAX_ACTIVE_ROOMS = 1000;
+const MAX_CONNECTIONS = 40;
 const MAX_MESSAGES_PER_WINDOW = 40;
 const RATE_LIMIT_WINDOW_MS = 10_000;
 const ROOM_MAX_AGE_MS = 4 * 60 * 60 * 1000;
@@ -61,8 +62,23 @@ function notifyDeparture(result) {
   }
 }
 
-export function createRelayServer() {
+function parseAllowedOrigins(value) {
+  if (!value) return null;
+  const origins = Array.isArray(value) ? value : value.split(',');
+  return new Set(origins.map((origin) => {
+    const normalized = origin.trim();
+    const parsed = new URL(normalized);
+    if (!['http:', 'https:'].includes(parsed.protocol) || parsed.origin !== normalized) {
+      throw new Error(`Invalid allowed browser origin: ${normalized}`);
+    }
+    return normalized;
+  }));
+}
+
+export function createRelayServer(options = {}) {
   const registry = new RoomRegistry();
+  const allowedOrigins = parseAllowedOrigins(options.allowedOrigins ?? process.env.MULTIPLAYER_ALLOWED_ORIGINS);
+  const maxConnections = options.maxConnections ?? MAX_CONNECTIONS;
   const httpServer = http.createServer((request, response) => {
     if (request.url === '/' || request.url === '/health') {
       response.writeHead(200, { 'Content-Type': 'application/json' });
@@ -73,7 +89,22 @@ export function createRelayServer() {
     response.end('Not Found');
   });
 
-  const webSocketServer = new WebSocketServer({ server: httpServer, maxPayload: 2048, perMessageDeflate: false });
+  const webSocketServer = new WebSocketServer({
+    server: httpServer,
+    maxPayload: 2048,
+    perMessageDeflate: false,
+    verifyClient: ({ origin }, done) => {
+      if (allowedOrigins && (!origin || !allowedOrigins.has(origin))) {
+        done(false, 403, 'Origin not allowed');
+        return;
+      }
+      if (webSocketServer.clients.size >= maxConnections) {
+        done(false, 503, 'Relay is at capacity');
+        return;
+      }
+      done(true);
+    },
+  });
   const messageWindows = new WeakMap();
 
   webSocketServer.on('connection', (socket) => {
@@ -89,6 +120,7 @@ export function createRelayServer() {
       windowState.count += 1;
       if (windowState.count > MAX_MESSAGES_PER_WINDOW) {
         safeSend(socket, { type: 'ERROR', message: 'Too many messages. Wait a moment and try again.' });
+        socket.close(1008, 'Message rate exceeded');
         return;
       }
       if (isBinary) {
@@ -221,4 +253,14 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1
   relay.httpServer.listen(port, '0.0.0.0', () => {
     console.log(`[imposter-india-relay] WebSocket server listening on 0.0.0.0:${port}`);
   });
+  let shuttingDown = false;
+  const shutdown = () => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    relay.close().catch(() => {
+      process.exitCode = 1;
+    });
+  };
+  process.once('SIGTERM', shutdown);
+  process.once('SIGINT', shutdown);
 }

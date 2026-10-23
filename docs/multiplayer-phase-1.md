@@ -46,7 +46,7 @@ sequenceDiagram
 
 The browser generates a UUID participant ID and a six-character random room suffix. The server rejects a duplicate ID in a room, rejects a socket joining multiple rooms, and requires the matching room and participant for send/leave. Room state is in memory and expires after four hours. A disconnect removes that participant; if the host leaves, the oldest remaining participant becomes host and receives a host-change event. The client reports the disconnect and currently requires a fresh join; there is no resume token or grace period.
 
-Room code, participant ID/name, host status, and test text are public to the room and visible to the relay. No secret word, role, vote, or actual game data may be sent over this proof protocol. The server imposes payload, room capacity, active-room and per-connection message limits. It has no account authentication, durable state, IP-based abuse controls, or origin allowlist, so it is a development proof rather than a public production service.
+Room code, participant ID/name, host status, and test text are public to the room and visible to the relay. No secret word, role, vote, or actual game data may be sent over this proof protocol. The server imposes payload, room capacity, active-room, concurrent-connection and per-connection message limits, and supports an optional browser Origin allowlist. It has no account authentication, durable state, IP-based abuse controls, or resume tokens, so it is a development proof rather than a public production service. See [Phase 1.1 deployment and verification](multiplayer-connectivity-phase-1-1.md) for production-host configuration and test steps.
 
 ## Setup and operations
 
