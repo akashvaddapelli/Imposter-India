@@ -121,3 +121,75 @@ main h1,main h3,.vote-card b,.turn-item b,.vote-breakdown-row,.result-votes{over
 /* Phase 5.1: the text fields fill their 44px control so the whole row is the tap target */
 .search-field{height:44px}
 .search-field input,.player-input input{align-self:stretch;height:100%}
+
+/* Phase 6: Mode B multiplayer connection proof */
+.mode-toggle-row{display:flex;gap:8px;margin-bottom:18px;background:var(--surface-2);padding:4px;border-radius:12px;border:1px solid var(--line)}
+.mode-tab{flex:1;min-height:44px;border:0;background:transparent;border-radius:9px;font-size:12px;font-weight:700;color:var(--muted);transition:.15s}
+.mode-tab.active{background:var(--surface);color:var(--ink);box-shadow:0 2px 8px rgba(0,0,0,.06)}
+[data-theme="dark"] .mode-tab.active{background:#2a2924;color:#f5f1e8}
+.connection-proof-container{margin-top:4px;display:flex;flex-direction:column;gap:14px}
+.proof-banner{display:flex;align-items:flex-start;gap:12px;background:#eef7f2;border:1px solid #d4ebd9;border-radius:14px;padding:14px 16px;color:#2f6b45}
+.proof-banner-icon{flex-shrink:0;margin-top:2px;color:#398b68}
+.proof-banner b{font-size:13px;display:block;margin-bottom:3px}
+.proof-banner p{font-size:11px;line-height:1.5;margin:0;color:#457d59}
+.connection-topline{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.status-pill{display:inline-flex;align-items:center;gap:7px;padding:6px 12px;border-radius:20px;font-size:11px;font-weight:700;letter-spacing:.3px}
+.status-connected{background:#e3f5e9;color:#2f6b45;border:1px solid #bfe7cb}
+.status-connecting{background:#fff3d8;color:#926815;border:1px solid #fae2a3}
+.status-error{background:#fde8e4;color:#a83520;border:1px solid #f8c4bc}
+.status-disconnected{background:#f1eee8;color:#6d675e;border:1px solid #dfdad0}
+.pulse{animation:pulse 1.2s infinite ease-in-out}@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+.config-toggle{font-size:11px}
+.server-config-panel{padding:16px}
+.config-hint{display:block;margin-top:7px;font-size:11px;color:var(--muted);line-height:1.5}
+.config-hint code{background:rgba(0,0,0,.05);padding:2px 5px;border-radius:4px;font-family:monospace}
+.proof-error{display:flex;align-items:center;gap:9px;background:#fde8e4;border:1px solid #f8c4bc;border-radius:12px;padding:11px 14px;color:#a83520;font-size:12px}
+.proof-entry-panel{padding:22px}
+.proof-action-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:16px;margin-top:18px}
+@media(max-width:600px){.proof-action-grid{grid-template-columns:1fr}}
+.proof-action-card{background:var(--surface-2);border:1px solid var(--line);border-radius:14px;padding:16px;display:flex;flex-direction:column;justify-content:space-between}
+.proof-action-card h4{font:700 14px Manrope,sans-serif;margin:0 0 6px}
+.proof-action-card p{font-size:11px;line-height:1.5;color:var(--muted);margin:0 0 14px}
+.join-code-row{display:flex;gap:8px}
+.join-code-row input{flex:1;min-width:0;height:44px;border:1px solid var(--line);border-radius:10px;padding:0 12px;font-size:13px;font-weight:700;letter-spacing:1px;background:var(--surface);color:var(--ink)}
+.proof-room-panel{padding:20px}
+.room-header{display:flex;align-items:center;justify-content:space-between;gap:14px;padding-bottom:16px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+.room-code-display{font:800 28px Manrope,sans-serif;letter-spacing:2px;margin:4px 0 0;color:var(--ink)}
+.room-header-actions{display:flex;gap:8px}
+.leave-btn{color:#b3361a;border-color:#f0c4b8}
+.leave-btn:hover{background:#fdece8}
+.room-participants{margin-top:16px}
+.participant-chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+.participant-chip{display:inline-flex;align-items:center;gap:8px;background:var(--surface-2);border:1px solid var(--line);border-radius:12px;padding:6px 12px;min-height:44px}
+.participant-chip.is-self{border-color:#e79b7c;background:#fff6f1}
+.participant-info{display:flex;flex-direction:column;line-height:1.2}
+.participant-info b{font-size:12px;color:var(--ink)}
+.participant-info small{font-size:10px;color:var(--muted)}
+.host-icon{color:#d97706}
+.room-chat{margin-top:22px;border-top:1px solid var(--line);padding-top:16px}
+.chat-stream{background:var(--surface-2);border:1px solid var(--line);border-radius:14px;padding:14px;max-height:260px;min-height:140px;overflow-y:auto;display:flex;flex-direction:column;gap:10px}
+.chat-empty{display:flex;align-items:center;justify-content:center;gap:8px;color:var(--muted);font-size:12px;min-height:110px}
+.chat-message{max-width:85%;border-radius:12px;padding:9px 12px;font-size:12px;line-height:1.45}
+.chat-mine{align-self:flex-end;background:#ef7c55;color:#fff}
+.chat-theirs{align-self:flex-start;background:var(--surface);border:1px solid var(--line);color:var(--ink)}
+.chat-meta{display:flex;align-items:baseline;gap:8px;margin-bottom:3px}
+.chat-meta b{font-size:11px;font-weight:700}
+.chat-mine .chat-meta small{color:#ffe7dc}
+.chat-theirs .chat-meta small{color:var(--muted)}
+.chat-text{margin:0;overflow-wrap:anywhere}
+.chat-form{display:flex;gap:8px;margin-top:10px}
+.chat-form input{flex:1;min-width:0;height:44px;border:1px solid var(--line);border-radius:10px;padding:0 12px;font-size:12px;background:var(--surface);color:var(--ink)}
+.chat-form input:focus{border-color:#e79b7c;outline:none}
+
+/* Dark mode overrides for multiplayer connection proof */
+[data-theme="dark"] .proof-banner{background:#1d2e24;border-color:#2a4d38;color:#a8e0be}
+[data-theme="dark"] .proof-banner p{color:#85c29d}
+[data-theme="dark"] .status-connected{background:#1e3828;color:#85e0a3;border-color:#2f5f3e}
+[data-theme="dark"] .status-connecting{background:#382d1a;color:#ffd778;border-color:#634e27}
+[data-theme="dark"] .status-error{background:#3b1e19;color:#fca595;border-color:#632c23}
+[data-theme="dark"] .status-disconnected{background:#2a2924;color:#b5ad9f;border-color:#3d3a33}
+[data-theme="dark"] .config-hint code{background:rgba(255,255,255,.08)}
+[data-theme="dark"] .participant-chip.is-self{background:#38251e;border-color:#8d4f3b}
+[data-theme="dark"] .chat-theirs{background:#24231f;border-color:#3c3931}
+[data-theme="dark"] .chat-theirs .chat-meta small{color:#aaa296}
+

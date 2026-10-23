@@ -1,7 +1,4 @@
 import { describe, expect, it } from 'vitest';
-// Vitest blanks CSS imports, so the stylesheet is read from disk. Node typings are not installed in this
-// project (no @types/node), hence the explicit expect-error on this one builtin import.
-// @ts-expect-error node:fs is available at test time, but its typings are not installed
 import { readFileSync } from 'node:fs';
 
 const css: string = readFileSync('src/styles.css', 'utf8').replace(/\/\*[\s\S]*?\*\//g, ''); // tests run from the project root; comments removed
