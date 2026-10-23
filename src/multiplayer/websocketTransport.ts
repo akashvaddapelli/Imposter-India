@@ -1,7 +1,6 @@
 import {
   type ClientMessage,
   type ConnectionStatus,
-  type ServerMessage,
   validateServerMessage,
 } from './protocol';
 import type { MessageListener, MultiplayerTransport, StatusListener } from './transport';

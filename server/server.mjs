@@ -1,254 +1,266 @@
+import { fileURLToPath } from 'node:url';
+import { resolve } from 'node:path';
+import { randomUUID } from 'node:crypto';
 import http from 'node:http';
 import { WebSocketServer, WebSocket } from 'ws';
+import { RoomRegistry } from './roomRegistry.mjs';
 
-const PORT = Number(process.env.PORT) || 3001;
-const MAX_ROOM_CAPACITY = 12;
+const MAX_ROOM_CODE_LENGTH = 12;
+const MAX_NAME_LENGTH = 24;
+const MAX_TEXT_LENGTH = 140;
+const MAX_ACTIVE_ROOMS = 1000;
+const MAX_CONNECTIONS = 40;
+const MAX_MESSAGES_PER_WINDOW = 40;
+const RATE_LIMIT_WINDOW_MS = 10_000;
+const ROOM_MAX_AGE_MS = 4 * 60 * 60 * 1000;
 
-/**
- * Sanitizes user-entered string: strips control characters, normalizes whitespace.
- */
-function sanitizeString(val, maxLen = 140) {
-  if (typeof val !== 'string') return '';
-  return val
-    .replace(/[\u0000-\u001F\u007F-\u009F]/g, '')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .slice(0, maxLen);
+function sanitizeString(value, maxLength) {
+  if (typeof value !== 'string') return '';
+  return value.replace(/[\u0000-\u001F\u007F-\u009F]/g, '').replace(/\s+/g, ' ').trim().slice(0, maxLength);
 }
 
-function normalizeRoomCode(raw) {
-  if (typeof raw !== 'string') return '';
-  return raw.toUpperCase().replace(/[^A-Z0-9-]/g, '').slice(0, 12);
+function parseRoomCode(value) {
+  if (typeof value !== 'string') return '';
+  const code = value.toUpperCase();
+  if (code.length < 3 || code.length > MAX_ROOM_CODE_LENGTH || !/^[A-Z0-9-]+$/.test(code)) return '';
+  return code;
 }
 
-// In-memory room store: Map<roomCode, { createdAt: number, members: Map<WebSocket, Participant> }>
-const rooms = new Map();
+function parseParticipantFields(message) {
+  const roomCode = parseRoomCode(message.roomCode);
+  const participantId = sanitizeString(message.participantId, 40);
+  const participantName = sanitizeString(message.participantName, MAX_NAME_LENGTH);
+  if (!roomCode || !participantId || !participantName) return null;
+  return { roomCode, participantId, participantName };
+}
 
-const server = http.createServer((req, res) => {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-
-  if (req.method === 'OPTIONS') {
-    res.writeHead(204);
-    res.end();
-    return;
+function safeSend(socket, payload) {
+  if (socket.readyState !== WebSocket.OPEN) return;
+  try {
+    socket.send(JSON.stringify(payload));
+  } catch {
+    socket.terminate();
   }
+}
 
-  if (req.url === '/health' || req.url === '/') {
-    res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(
-      JSON.stringify({
-        status: 'ok',
-        service: 'imposter-india-relay',
-        activeRooms: rooms.size,
-        timestamp: Date.now(),
-      })
-    );
-    return;
+function broadcast(room, payload, except = null) {
+  for (const socket of room.keys()) {
+    if (socket !== except) safeSend(socket, payload);
   }
+}
 
-  res.writeHead(404, { 'Content-Type': 'text/plain' });
-  res.end('Not Found');
-});
+function notifyDeparture(result) {
+  if (!result) return;
+  if (result.remaining.size === 0) return;
+  broadcast(result.remaining, {
+    type: 'PARTICIPANT_LEFT',
+    participantId: result.participant.id,
+    reason: result.reason,
+  });
+  if (result.hostChanged) {
+    broadcast(result.remaining, { type: 'HOST_CHANGED', participantId: result.hostChanged.id });
+  }
+}
 
-const wss = new WebSocketServer({ server });
-
-function safeSend(ws, payload) {
-  if (ws.readyState === WebSocket.OPEN) {
-    try {
-      ws.send(JSON.stringify(payload));
-    } catch {
-      // Ignore socket send errors
+function parseAllowedOrigins(value) {
+  if (!value) return null;
+  const origins = Array.isArray(value) ? value : value.split(',');
+  return new Set(origins.map((origin) => {
+    const normalized = origin.trim();
+    const parsed = new URL(normalized);
+    if (!['http:', 'https:'].includes(parsed.protocol) || parsed.origin !== normalized) {
+      throw new Error(`Invalid allowed browser origin: ${normalized}`);
     }
-  }
+    return normalized;
+  }));
 }
 
-function broadcastToRoom(roomCode, payload, excludeWs = null) {
-  const room = rooms.get(roomCode);
-  if (!room) return;
-  for (const [memberWs] of room.members.entries()) {
-    if (memberWs !== excludeWs) {
-      safeSend(memberWs, payload);
+export function createRelayServer(options = {}) {
+  const registry = new RoomRegistry();
+  const allowedOrigins = parseAllowedOrigins(options.allowedOrigins ?? process.env.MULTIPLAYER_ALLOWED_ORIGINS);
+  const maxConnections = options.maxConnections ?? MAX_CONNECTIONS;
+  const httpServer = http.createServer((request, response) => {
+    if (request.url === '/' || request.url === '/health') {
+      response.writeHead(200, { 'Content-Type': 'application/json' });
+      response.end(JSON.stringify({ status: 'ok', service: 'imposter-india-relay', activeRooms: registry.rooms.size }));
+      return;
     }
-  }
-}
+    response.writeHead(404, { 'Content-Type': 'text/plain' });
+    response.end('Not Found');
+  });
 
-function removeClientFromRoom(ws, reason = 'left') {
-  for (const [code, room] of rooms.entries()) {
-    const participant = room.members.get(ws);
-    if (participant) {
-      room.members.delete(ws);
+  const webSocketServer = new WebSocketServer({
+    server: httpServer,
+    maxPayload: 2048,
+    perMessageDeflate: false,
+    verifyClient: ({ origin }, done) => {
+      if (allowedOrigins && (!origin || !allowedOrigins.has(origin))) {
+        done(false, 403, 'Origin not allowed');
+        return;
+      }
+      if (webSocketServer.clients.size >= maxConnections) {
+        done(false, 503, 'Relay is at capacity');
+        return;
+      }
+      done(true);
+    },
+  });
+  const messageWindows = new WeakMap();
 
-      // If room is now empty, delete it
-      if (room.members.size === 0) {
-        rooms.delete(code);
-      } else {
-        // If the host left, assign host to the oldest remaining member
-        if (participant.isHost) {
-          const nextHost = room.members.values().next().value;
-          if (nextHost) nextHost.isHost = true;
+  webSocketServer.on('connection', (socket) => {
+    messageWindows.set(socket, { startedAt: Date.now(), count: 0 });
+
+    socket.on('message', (data, isBinary) => {
+      const windowState = messageWindows.get(socket);
+      const now = Date.now();
+      if (now - windowState.startedAt >= RATE_LIMIT_WINDOW_MS) {
+        windowState.startedAt = now;
+        windowState.count = 0;
+      }
+      windowState.count += 1;
+      if (windowState.count > MAX_MESSAGES_PER_WINDOW) {
+        safeSend(socket, { type: 'ERROR', message: 'Too many messages. Wait a moment and try again.' });
+        socket.close(1008, 'Message rate exceeded');
+        return;
+      }
+      if (isBinary) {
+        safeSend(socket, { type: 'ERROR', message: 'Only text protocol messages are accepted.' });
+        return;
+      }
+
+      let message;
+      try {
+        message = JSON.parse(data.toString());
+      } catch {
+        safeSend(socket, { type: 'ERROR', message: 'Malformed JSON payload.' });
+        return;
+      }
+      if (!message || typeof message !== 'object' || Array.isArray(message) || typeof message.type !== 'string') {
+        safeSend(socket, { type: 'ERROR', message: 'Invalid message structure.' });
+        return;
+      }
+
+      if (message.type === 'CREATE_ROOM' || message.type === 'JOIN_ROOM') {
+        const fields = parseParticipantFields(message);
+        if (!fields) {
+          safeSend(socket, { type: 'JOIN_ERROR', reason: 'Room code, participant ID, and name are required.' });
+          return;
         }
-
-        broadcastToRoom(code, {
-          type: 'PARTICIPANT_LEFT',
-          participantId: participant.id,
-          reason,
+        if (message.type === 'CREATE_ROOM' && registry.rooms.size >= MAX_ACTIVE_ROOMS) {
+          safeSend(socket, { type: 'JOIN_ERROR', reason: 'The relay is full. Please try again later.' });
+          return;
+        }
+        const result = message.type === 'CREATE_ROOM'
+          ? registry.create(socket, fields)
+          : registry.join(socket, fields);
+        if (result.error) {
+          safeSend(socket, { type: 'JOIN_ERROR', reason: result.error });
+          return;
+        }
+        safeSend(socket, {
+          type: 'ROOM_JOINED',
+          roomCode: result.roomCode,
+          participantId: result.participant.id,
+          isHost: result.participant.isHost,
+          participants: result.participants,
         });
+        if (message.type === 'JOIN_ROOM') {
+          const room = registry.rooms.get(result.roomCode).members;
+          broadcast(room, { type: 'PARTICIPANT_JOINED', participant: result.participant }, socket);
+        }
+        return;
       }
-      break;
-    }
-  }
+
+      if (message.type === 'LEAVE_ROOM') {
+        const roomCode = parseRoomCode(message.roomCode);
+        const participantId = sanitizeString(message.participantId, 40);
+        const result = roomCode && participantId
+          ? registry.leave(socket, roomCode, participantId, 'left')
+          : null;
+        if (!result) {
+          safeSend(socket, { type: 'ERROR', message: 'Invalid room leave action.' });
+          return;
+        }
+        notifyDeparture(result);
+        safeSend(socket, { type: 'PONG', timestamp: Date.now() });
+        return;
+      }
+
+      if (message.type === 'SEND_TEST_MESSAGE') {
+        const roomCode = parseRoomCode(message.roomCode);
+        const participantId = sanitizeString(message.participantId, 40);
+        const text = sanitizeString(message.text, MAX_TEXT_LENGTH);
+        if (!roomCode || !participantId || !text) {
+          safeSend(socket, { type: 'ERROR', message: 'Invalid test message.' });
+          return;
+        }
+        const sender = registry.getParticipant(socket, roomCode, participantId);
+        const room = registry.rooms.get(roomCode);
+        if (!sender || !room) {
+          safeSend(socket, { type: 'ERROR', message: 'Not an active member of this room.' });
+          return;
+        }
+        const testMessage = {
+          id: `msg-${randomUUID()}`,
+          senderId: sender.id,
+          senderName: sender.name,
+          text,
+          timestamp: Date.now(),
+        };
+        broadcast(room.members, { type: 'TEST_MESSAGE_RECEIVED', message: testMessage });
+        return;
+      }
+
+      if (message.type === 'PING') {
+        const timestamp = typeof message.timestamp === 'number' && Number.isFinite(message.timestamp)
+          ? message.timestamp
+          : Date.now();
+        safeSend(socket, { type: 'PONG', timestamp });
+        return;
+      }
+
+      safeSend(socket, { type: 'ERROR', message: 'Unknown protocol message.' });
+    });
+
+    socket.on('close', () => notifyDeparture(registry.removeSocket(socket)));
+    socket.on('error', () => notifyDeparture(registry.removeSocket(socket, 'error')));
+  });
+
+  const cleanupTimer = setInterval(() => registry.clearExpired(Date.now(), ROOM_MAX_AGE_MS), 30 * 60 * 1000);
+  cleanupTimer.unref();
+
+  return {
+    httpServer,
+    webSocketServer,
+    registry,
+    close() {
+      clearInterval(cleanupTimer);
+      for (const socket of webSocketServer.clients) socket.terminate();
+      return Promise.all([
+        new Promise((resolveClose) => webSocketServer.close(resolveClose)),
+        new Promise((resolveClose) => {
+          if (httpServer.listening) httpServer.close(resolveClose);
+          else resolveClose();
+        }),
+      ]).then(() => undefined);
+    },
+  };
 }
 
-wss.on('connection', (ws) => {
-  ws.on('message', (data) => {
-    let msg;
-    try {
-      msg = JSON.parse(data.toString());
-    } catch {
-      safeSend(ws, { type: 'ERROR', message: 'Malformed JSON payload.' });
-      return;
-    }
-
-    if (!msg || typeof msg !== 'object') {
-      safeSend(ws, { type: 'ERROR', message: 'Invalid message structure.' });
-      return;
-    }
-
-    const type = msg.type;
-
-    if (type === 'JOIN_ROOM') {
-      const roomCode = normalizeRoomCode(msg.roomCode);
-      const participantId = sanitizeString(msg.participantId, 40);
-      const participantName = sanitizeString(msg.participantName, 24);
-
-      if (!roomCode || roomCode.length < 3) {
-        safeSend(ws, { type: 'JOIN_ERROR', reason: 'Invalid room code.' });
-        return;
-      }
-
-      if (!participantId || !participantName) {
-        safeSend(ws, { type: 'JOIN_ERROR', reason: 'Participant name and ID required.' });
-        return;
-      }
-
-      let room = rooms.get(roomCode);
-      const isNewRoom = !room;
-
-      if (!room) {
-        room = { createdAt: Date.now(), members: new Map() };
-        rooms.set(roomCode, room);
-      }
-
-      if (room.members.size >= MAX_ROOM_CAPACITY) {
-        safeSend(ws, { type: 'JOIN_ERROR', reason: `Room is full (max ${MAX_ROOM_CAPACITY} players).` });
-        return;
-      }
-
-      const isHost = isNewRoom || room.members.size === 0;
-      const participant = {
-        id: participantId,
-        name: participantName,
-        isHost,
-        joinedAt: Date.now(),
-      };
-
-      room.members.set(ws, participant);
-
-      // Send confirmation with current membership
-      safeSend(ws, {
-        type: 'ROOM_JOINED',
-        roomCode,
-        participantId,
-        isHost,
-        participants: Array.from(room.members.values()),
-      });
-
-      // Notify others in room
-      broadcastToRoom(
-        roomCode,
-        {
-          type: 'PARTICIPANT_JOINED',
-          participant,
-        },
-        ws
-      );
-
-      return;
-    }
-
-    if (type === 'LEAVE_ROOM') {
-      removeClientFromRoom(ws, 'left');
-      safeSend(ws, { type: 'PONG', timestamp: Date.now() });
-      return;
-    }
-
-    if (type === 'SEND_TEST_MESSAGE') {
-      const roomCode = normalizeRoomCode(msg.roomCode);
-      const participantId = sanitizeString(msg.participantId, 40);
-      const text = sanitizeString(msg.text, 140);
-
-      if (!roomCode || !participantId || !text) {
-        safeSend(ws, { type: 'ERROR', message: 'Missing test message fields.' });
-        return;
-      }
-
-      const room = rooms.get(roomCode);
-      if (!room) {
-        safeSend(ws, { type: 'ERROR', message: 'Room not found.' });
-        return;
-      }
-
-      const sender = room.members.get(ws);
-      if (!sender || sender.id !== participantId) {
-        safeSend(ws, { type: 'ERROR', message: 'Not an active member of this room.' });
-        return;
-      }
-
-      const testMsg = {
-        id: `msg-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-        senderId: participantId,
-        senderName: sender.name,
-        text,
-        timestamp: Date.now(),
-      };
-
-      broadcastToRoom(roomCode, {
-        type: 'TEST_MESSAGE_RECEIVED',
-        message: testMsg,
-      });
-
-      return;
-    }
-
-    if (type === 'PING') {
-      safeSend(ws, { type: 'PONG', timestamp: typeof msg.timestamp === 'number' ? msg.timestamp : Date.now() });
-      return;
-    }
-
-    safeSend(ws, { type: 'ERROR', message: `Unknown message type: "${String(type)}"` });
+if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1])) {
+  const port = Number(process.env.PORT) || 3001;
+  const relay = createRelayServer();
+  relay.httpServer.listen(port, '0.0.0.0', () => {
+    console.log(`[imposter-india-relay] WebSocket server listening on 0.0.0.0:${port}`);
   });
-
-  ws.on('close', () => {
-    removeClientFromRoom(ws, 'disconnected');
-  });
-
-  ws.on('error', () => {
-    removeClientFromRoom(ws, 'error');
-  });
-});
-
-// Periodic cleanup: delete rooms older than 4 hours
-setInterval(() => {
-  const now = Date.now();
-  for (const [code, room] of rooms.entries()) {
-    if (now - room.createdAt > 4 * 60 * 60 * 1000) {
-      rooms.delete(code);
-    }
-  }
-}, 30 * 60 * 1000);
-
-server.listen(PORT, '0.0.0.0', () => {
-  console.log(`[imposter-india-relay] WebSocket server listening on 0.0.0.0:${PORT}`);
-});
+  let shuttingDown = false;
+  const shutdown = () => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    relay.close().catch(() => {
+      process.exitCode = 1;
+    });
+  };
+  process.once('SIGTERM', shutdown);
+  process.once('SIGINT', shutdown);
+}

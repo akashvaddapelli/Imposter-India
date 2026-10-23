@@ -23,40 +23,68 @@ export class MockRelayHub {
   }
 
   handleClientMessage(transport: MockTransport, msg: ClientMessage): void {
+    if (transport.getStatus() !== 'connected') return;
     const valid = validateClientMessage(msg);
     if (!valid) {
       transport.deliverServerMessage({ type: 'ERROR', message: 'Malformed client message.' });
       return;
     }
 
-    if (valid.type === 'JOIN_ROOM') {
+    if (valid.type === 'CREATE_ROOM') {
       const { roomCode, participantId, participantName } = valid;
+      if ([...this.rooms.values()].some((members) => members.some((member) => member.transport === transport))) {
+        transport.deliverServerMessage({ type: 'JOIN_ERROR', reason: 'This connection is already in a room.' });
+        return;
+      }
+      if (this.rooms.has(roomCode)) {
+        transport.deliverServerMessage({ type: 'JOIN_ERROR', reason: 'That room code is already in use.' });
+        return;
+      }
       const room = this.rooms.get(roomCode) ?? [];
-      const isHost = room.length === 0;
-
       const newParticipant: Participant = {
         id: participantId,
         name: participantName,
-        isHost,
+        isHost: true,
         joinedAt: Date.now(),
       };
 
       // Add to room
       room.push({ participant: newParticipant, transport });
       this.rooms.set(roomCode, room);
-
-      // Confirm to joiner
       transport.deliverServerMessage({
         type: 'ROOM_JOINED',
         roomCode,
         participantId,
-        isHost,
+        isHost: true,
+        participants: room.map((r) => r.participant),
+      });
+      return;
+    }
+
+    if (valid.type === 'JOIN_ROOM') {
+      const { roomCode, participantId, participantName } = valid;
+      const room = this.rooms.get(roomCode);
+      if ([...this.rooms.values()].some((members) => members.some((member) => member.transport === transport))) {
+        transport.deliverServerMessage({ type: 'JOIN_ERROR', reason: 'This connection is already in a room.' });
+        return;
+      }
+      if (!room) {
+        transport.deliverServerMessage({ type: 'JOIN_ERROR', reason: 'Room not found. Check the code and try again.' });
+        return;
+      }
+      if (room.length >= 12 || room.some((member) => member.participant.id === participantId)) {
+        transport.deliverServerMessage({ type: 'JOIN_ERROR', reason: 'Room is full or participant ID is already in use.' });
+        return;
+      }
+      const newParticipant: Participant = { id: participantId, name: participantName, isHost: false, joinedAt: Date.now() };
+      room.push({ participant: newParticipant, transport });
+      transport.deliverServerMessage({
+        type: 'ROOM_JOINED', roomCode, participantId, isHost: false,
         participants: room.map((r) => r.participant),
       });
 
-      // Broadcast to other participants
       for (const p of room) {
-        if (p.participant.id !== participantId) {
+        if (p.transport !== transport) {
           p.transport.deliverServerMessage({
             type: 'PARTICIPANT_JOINED',
             participant: newParticipant,
@@ -67,6 +95,12 @@ export class MockRelayHub {
     }
 
     if (valid.type === 'LEAVE_ROOM') {
+      const room = this.rooms.get(valid.roomCode);
+      const member = room?.find((entry) => entry.transport === transport && entry.participant.id === valid.participantId);
+      if (!member) {
+        transport.deliverServerMessage({ type: 'ERROR', message: 'Invalid room leave action.' });
+        return;
+      }
       this.removeParticipant(transport, valid.roomCode, valid.participantId, 'left');
       return;
     }
@@ -78,7 +112,7 @@ export class MockRelayHub {
         return;
       }
 
-      const sender = room.find((r) => r.participant.id === valid.participantId);
+      const sender = room.find((r) => r.transport === transport && r.participant.id === valid.participantId);
       if (!sender) {
         transport.deliverServerMessage({ type: 'ERROR', message: 'Not a member of this room.' });
         return;
@@ -127,6 +161,13 @@ export class MockRelayHub {
           participantId,
           reason,
         });
+      }
+      const removed = room.find((r) => r.participant.id === participantId);
+      if (removed?.participant.isHost) {
+        remaining[0].participant.isHost = true;
+        for (const p of remaining) {
+          p.transport.deliverServerMessage({ type: 'HOST_CHANGED', participantId: remaining[0].participant.id });
+        }
       }
     }
   }
