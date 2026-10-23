@@ -104,6 +104,12 @@ export function useConnectionProof(options: UseConnectionProofOptions = {}) {
         return;
       }
 
+      if (msg.type === 'HOST_CHANGED') {
+        setParticipants((prev) => prev.map((p) => ({ ...p, isHost: p.id === msg.participantId })));
+        setIsHost(msg.participantId === participantIdRef.current);
+        return;
+      }
+
       if (msg.type === 'TEST_MESSAGE_RECEIVED') {
         setMessages((prev) => [...prev, msg.message]);
         return;
@@ -138,7 +144,7 @@ export function useConnectionProof(options: UseConnectionProofOptions = {}) {
         }
 
         transport.send({
-          type: 'JOIN_ROOM',
+          type: 'CREATE_ROOM',
           roomCode: newCode,
           participantId: participantIdRef.current,
           participantName: cleanName,

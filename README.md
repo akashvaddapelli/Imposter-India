@@ -4,7 +4,7 @@ A responsive Indian-culture-first social deduction party game built with React, 
 
 ## Scope
 
-This repository is intentionally **frontend-only**. There are no APIs, backend, database, authentication, or real networking. One Mobile is playable locally in the browser. Multiple Mobiles is a clearly marked UI prototype only.
+One Mobile is playable locally in the browser and needs no backend. Multiple Mobiles remains a UI prototype for gameplay; an isolated Mode B connection proof now uses a small Node WebSocket relay to test temporary rooms and harmless messages. The proof does not synchronize a game or transmit words and roles.
 
 ## Run locally
 
@@ -35,6 +35,8 @@ npm run preview
 - `src/lib/game.ts` — pure game rules: setup validation, role assignment, vote validation, tie handling and round results
 - `src/lib/timer.ts` + `src/hooks/useCountdown.ts` — timestamp-based discussion timer
 - `src/lib/words.ts` — validation and persistence for custom/imported words
+- `src/multiplayer/` — isolated connection proof, protocol validation and WebSocket transport
+- `server/server.mjs` — temporary in-memory room relay for the proof
 - `src/styles.css` — responsive visual system and component styles
 
 ## Current UI screens
@@ -42,7 +44,7 @@ npm run preview
 - Home and How to Play
 - Offline mode selection
 - One Mobile player setup, category selection, difficulty, and language settings
-- Multiple Mobiles mock room/join screens
+- Multiple Mobiles mock room/join screens and a separate Mode B connection proof
 - Searchable word library with filters, accurate computed counts, local word creation, JSON export/import
 - Secret card reveal and pass-the-phone flow
 - Discussion phase with timer controls and speaker order
@@ -92,8 +94,8 @@ Words added in the library or imported from JSON are validated with the same rul
 
 ## Planned follow-up
 
-1. Implement actual multi-device local networking in an appropriate runtime.
-2. Later, build online rooms, WebSocket game sync, and audio/video as a separate phase.
+1. Harden and deploy the Mode B relay, then implement online game sessions and private role delivery.
+2. Evaluate native networking options for Mode C nearby offline play; see `docs/multiplayer-phase-1.md`.
 
 ## Note
 
@@ -116,9 +118,11 @@ Google Fonts are loaded from an external stylesheet for typography; all gameplay
 
 The build uses root-relative asset paths (`/assets/...`), so serve `dist/` from the root of a domain. To host under a sub-path (for example GitHub Pages project sites) set `base` in `vite.config.ts` first.
 
+The connection proof also needs the Node relay running (`npm run server`). For hosted use, deploy `server/server.mjs` to a public Node service with WebSocket support and TLS, then set `VITE_MULTIPLAYER_SERVER_URL` to its `wss://` endpoint when building the frontend. The default `ws(s)://<page-host>:3001` URL is for local development; HTTPS sites require a secure WebSocket endpoint. The relay keeps rooms in memory and is not production-ready for real games. See `docs/multiplayer-phase-1.md` for the design, limitations and Mode C investigation.
+
 ## Known limitations
 
-- Multiple Mobiles is a UI prototype; there is no networking.
+- Full Multiple Mobiles gameplay remains a UI prototype; networking is limited to the isolated Mode B connection proof.
 - Custom words accept letters and digits of any script. Duplicate checks ignore case, Latin accents, spaces and punctuation but never transliterate, so a Devanagari word and its Latin spelling are different words.
 - Fonts load from Google Fonts; offline the app falls back to system fonts.
 - Layout and 44px targets are verified in emulated viewports only; the procedure is in `docs/browser-qa.md`.

@@ -30,6 +30,7 @@ describe('Multiplayer Connection Proof: Hook and Transport Integration', () => {
     // Host creates room
     await act(async () => {
       await host.current.createRoom('Host Ramesh');
+      await new Promise((r) => setTimeout(r, 20));
     });
 
     expect(host.current.status).toBe('connected');
@@ -73,11 +74,13 @@ describe('Multiplayer Connection Proof: Hook and Transport Integration', () => {
 
     await act(async () => {
       await host.current.createRoom('Host Ramesh');
+      await new Promise((r) => setTimeout(r, 20));
     });
     const code = host.current.roomCode;
 
     await act(async () => {
       await peer.current.joinRoom(code, 'Friend Priya');
+      await new Promise((r) => setTimeout(r, 20));
     });
 
     // Peer sends a harmless test message
@@ -108,6 +111,10 @@ describe('Multiplayer Connection Proof: Hook and Transport Integration', () => {
 
     await act(async () => {
       await host.current.createRoom('Host');
+      await new Promise((r) => setTimeout(r, 20));
+    });
+
+    await act(async () => {
       await peer.current.joinRoom(host.current.roomCode, 'Guest');
       await new Promise((r) => setTimeout(r, 20));
     });

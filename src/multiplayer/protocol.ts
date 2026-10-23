@@ -9,6 +9,7 @@ export const PROTOCOL_VERSION = '1.0';
 export const MAX_NAME_LENGTH = 24;
 export const MAX_TEXT_LENGTH = 140;
 export const MAX_ROOM_CODE_LENGTH = 12;
+export const ROOM_CODE_RANDOM_LENGTH = 6;
 
 export type Participant = {
   id: string;
@@ -35,6 +36,13 @@ export type ClientJoinRoomMessage = {
   participantName: string;
 };
 
+export type ClientCreateRoomMessage = {
+  type: 'CREATE_ROOM';
+  roomCode: string;
+  participantId: string;
+  participantName: string;
+};
+
 export type ClientLeaveRoomMessage = {
   type: 'LEAVE_ROOM';
   roomCode: string;
@@ -54,6 +62,7 @@ export type ClientPingMessage = {
 };
 
 export type ClientMessage =
+  | ClientCreateRoomMessage
   | ClientJoinRoomMessage
   | ClientLeaveRoomMessage
   | ClientSendTestMessage
@@ -84,6 +93,11 @@ export type ServerParticipantLeftMessage = {
   reason?: string;
 };
 
+export type ServerHostChangedMessage = {
+  type: 'HOST_CHANGED';
+  participantId: string;
+};
+
 export type ServerTestMessageReceived = {
   type: 'TEST_MESSAGE_RECEIVED';
   message: TestMessage;
@@ -104,6 +118,7 @@ export type ServerMessage =
   | ServerJoinErrorMessage
   | ServerParticipantJoinedMessage
   | ServerParticipantLeftMessage
+  | ServerHostChangedMessage
   | ServerTestMessageReceived
   | ServerPongMessage
   | ServerErrorMessage;
@@ -111,8 +126,8 @@ export type ServerMessage =
 /** Sanitizes user-entered text: trims whitespace, removes control chars, caps length. */
 export function sanitizeString(val: unknown, maxLen = MAX_TEXT_LENGTH): string {
   if (typeof val !== 'string') return '';
-  // eslint-disable-next-line no-control-regex
   return val
+    // eslint-disable-next-line no-control-regex
     .replace(/[\u0000-\u001F\u007F-\u009F]/g, '') // strip control chars
     .replace(/\s+/g, ' ')
     .trim()
@@ -131,16 +146,23 @@ export function normalizeRoomCode(raw: unknown): string {
 /** Generates a human-friendly room code (e.g. INDIA-7K2). */
 export function generateRoomCode(): string {
   const chars = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ'; // exclude ambiguous characters: 0, 1, I, O
+  const bytes = new Uint8Array(ROOM_CODE_RANDOM_LENGTH);
+  globalThis.crypto.getRandomValues(bytes);
   let random = '';
-  for (let i = 0; i < 3; i++) {
-    random += chars.charAt(Math.floor(Math.random() * chars.length));
+  for (const byte of bytes) {
+    random += chars.charAt(byte % chars.length);
   }
   return `INDIA-${random}`;
 }
 
 /** Generates a safe, random client ID. */
 export function generateParticipantId(): string {
-  return `p-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+  const bytes = new Uint8Array(16);
+  globalThis.crypto.getRandomValues(bytes);
+  bytes[6] = (bytes[6] & 0x0f) | 0x40;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const hex = [...bytes].map((byte) => byte.toString(16).padStart(2, '0')).join('');
+  return `p-${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
 
 /** Validates and parses an incoming ClientMessage. Returns null if invalid or malformed. */
@@ -149,14 +171,15 @@ export function validateClientMessage(raw: unknown): ClientMessage | null {
   const msg = raw as Record<string, unknown>;
   const type = msg.type;
 
-  if (type === 'JOIN_ROOM') {
+  if (type === 'CREATE_ROOM' || type === 'JOIN_ROOM') {
     const roomCode = normalizeRoomCode(msg.roomCode);
     const participantId = sanitizeString(msg.participantId, 40);
     const participantName = sanitizeString(msg.participantName, MAX_NAME_LENGTH);
     if (!roomCode || roomCode.length < 3) return null;
     if (!participantId) return null;
     if (!participantName) return null;
-    return { type: 'JOIN_ROOM', roomCode, participantId, participantName };
+    if (type === 'CREATE_ROOM') return { type, roomCode, participantId, participantName };
+    return { type, roomCode, participantId, participantName };
   }
 
   if (type === 'LEAVE_ROOM') {
@@ -226,6 +249,12 @@ export function validateServerMessage(raw: unknown): ServerMessage | null {
     if (!participantId) return null;
     const reason = typeof msg.reason === 'string' ? sanitizeString(msg.reason, 100) : undefined;
     return { type: 'PARTICIPANT_LEFT', participantId, ...(reason ? { reason } : {}) };
+  }
+
+  if (type === 'HOST_CHANGED') {
+    const participantId = sanitizeString(msg.participantId, 40);
+    if (!participantId) return null;
+    return { type: 'HOST_CHANGED', participantId };
   }
 
   if (type === 'TEST_MESSAGE_RECEIVED') {

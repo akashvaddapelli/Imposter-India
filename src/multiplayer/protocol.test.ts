@@ -6,7 +6,6 @@ import {
   sanitizeString,
   validateClientMessage,
   validateServerMessage,
-  MAX_NAME_LENGTH,
   MAX_TEXT_LENGTH,
 } from './protocol';
 
@@ -31,18 +30,26 @@ describe('multiplayer protocol: sanitization and generators', () => {
 
   it('generateRoomCode produces a clean format (INDIA-XXX)', () => {
     const code = generateRoomCode();
-    expect(code).toMatch(/^INDIA-[2-9A-Z]{3}$/);
+    expect(code).toMatch(/^INDIA-[2-9A-HJ-NP-Z]{6}$/);
   });
 
   it('generateParticipantId produces unique client IDs', () => {
     const id1 = generateParticipantId();
     const id2 = generateParticipantId();
-    expect(id1).toMatch(/^p-[a-z0-9]+-[a-z0-9]+$/);
+    expect(id1).toMatch(/^p-[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
     expect(id1).not.toBe(id2);
   });
 });
 
 describe('multiplayer protocol: validateClientMessage', () => {
+  it('accepts room creation separately from joining', () => {
+    expect(validateClientMessage({
+      type: 'CREATE_ROOM', roomCode: 'INDIA-ABC234', participantId: 'p-1', participantName: 'Ramesh',
+    })).toEqual({
+      type: 'CREATE_ROOM', roomCode: 'INDIA-ABC234', participantId: 'p-1', participantName: 'Ramesh',
+    });
+  });
+
   it('accepts valid JOIN_ROOM message', () => {
     const valid = validateClientMessage({
       type: 'JOIN_ROOM',
@@ -76,6 +83,13 @@ describe('multiplayer protocol: validateClientMessage', () => {
       roomCode: 'INDIA-7K2',
       participantId: 'p-user-1',
     });
+  });
+
+  it('validates host transfer messages', () => {
+    expect(validateServerMessage({ type: 'HOST_CHANGED', participantId: 'p-2' })).toEqual({
+      type: 'HOST_CHANGED', participantId: 'p-2',
+    });
+    expect(validateServerMessage({ type: 'HOST_CHANGED', participantId: '' })).toBeNull();
   });
 
   it('accepts valid SEND_TEST_MESSAGE and enforces length cap', () => {
